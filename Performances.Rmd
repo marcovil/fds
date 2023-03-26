@@ -1,0 +1,168 @@
+---
+title: "Performances"
+output: html_document
+date: "2023-03-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(repurrrsive)
+library(jsonlite)
+library(purrr)
+```
+
+Apro il file JSON, per come è fatto devo accedere al primo elemento e posso quindi caricarlo in un tibble.
+
+```{r}
+complete <- read_json("complete.json")
+programs <- complete[[1]]
+programsT <- tibble(programs)
+```
+
+A questo punto ho la possibilità di accedere ai programmi, controllo che siano tutte liste di lunghezza 6.
+Qui dovrei anche controllare che contengono tutte gli stessi nomi...
+
+```{r}
+programsT %>%
+  mutate(programs_L=sapply(programs,length)) %>%
+  filter(programs_L != 6)
+```
+
+Posso quindi espandere i programmi.
+
+```{r}
+programsT <- programsT %>% unnest_wider(programs)
+```
+
+La maggior parte dei concerti è associato a un concerto, ma non è sempre così. 
+
+```{r}
+programsT %>%
+  mutate(concerts_L=sapply(concerts,length)) %>%
+  count(concerts_L)
+```
+
+Ognuno dei concerti darà origine a una osservazione.
+
+```{r}
+programsT <- programsT %>% unnest_longer(concerts)
+```
+
+Verifico che ogni concerto abbia 5 campi.
+
+```{r}
+programsT %>%
+  mutate(concerts_L = sapply(concerts, length)) %>%
+  filter(concerts_L != 5)
+```
+
+Posso espandere con unnest_wider. Allargo il tibble di 4 colonne, al posto di concerts ho eventType, Location, Venue, Date e Time.
+
+```{r}
+programsT <- programsT %>% unnest_wider(concerts)
+```
+
+Ogni programma contiene un certo numero di lavori (works).
+
+```{r}
+programsT %>%
+  mutate(works_L=sapply(works,length)) %>%
+  count(works_L)
+```
+
+Posso utilizzare unnest_longer, ogni lavoro associato a un programma diventerà parte di una osservazione.
+
+```{r}
+programsT <- programsT %>% unnest_longer(works)
+```
+
+Ora works contiene liste di lunghezze diverse, a seconda delle caratteristiche del lavoro. 
+
+```{r}
+programsT %>%
+  mutate(works_L=sapply(works,length)) %>%
+  count(works_L)
+```
+
+Le liste di lunghezza 3 sono quelle che contengono le intermissions.
+
+```{r}
+programsT %>%
+  mutate(works_L = sapply(works,length)) %>%
+  filter(works_L == 3)
+```
+
+Cerco di capire che cosa contengono.
+
+```{r}
+works <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 3) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+first <- works[[1]]
+
+lapply(works, identical, first)
+identical(first,second)
+
+works4 <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 4) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+works5 <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 5) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+works6 <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 6) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+```
+
+Faccio unnest wider di works
+
+```{r}
+programsT <- programsT %>% unnest_wider(works)
+```
+
+Quanto lunghe sono le liste in workTitle?
+
+```{r}
+programsT %>%
+  mutate(workTitle_L = sapply(workTitle, length)) %>%
+  count(workTitle_L)
+```
+
+Guardo le liste di lunghezza 2
+
+```{r}
+programsT %>%
+  mutate(workTitle_L = sapply(workTitle, length)) %>%
+  filter(workTitle_L == 2) %>%
+  separate(workTitle,c("a","b"))
+```
+
+```{r}
+# workTitle ora contiene liste di lunghezza 1?
+programsT %>%
+  mutate(check = sapply(workTitle, length)) %>%
+  mutate(check = (check == 1)) %>%
+  filter(check != TRUE)
+
+programsT %>%
+  mutate(check = sapply(workTitle, length)) %>%
+  filter(check == 2) %>%
+  unnest_wider(workTitle)
+```
