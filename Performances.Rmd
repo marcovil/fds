@@ -39,7 +39,7 @@ Posso quindi espandere i programmi.
 programsT <- programsT %>% unnest_wider(programs)
 ```
 
-La maggior parte dei concerti è associato a un concerto, ma non è sempre così. 
+Nella maggior parte dei casi a un programma è associato un concerto, ma non è sempre così. 
 
 ```{r}
 programsT %>%
@@ -47,7 +47,7 @@ programsT %>%
   count(concerts_L)
 ```
 
-Ognuno dei concerti darà origine a una osservazione.
+Espando i concerti, ottengo una riga per ogni concerto.
 
 ```{r}
 programsT <- programsT %>% unnest_longer(concerts)
@@ -75,7 +75,7 @@ programsT %>%
   count(works_L)
 ```
 
-Posso utilizzare unnest_longer, ogni lavoro associato a un programma diventerà parte di una osservazione.
+Posso utilizzare unnest_longer, ogni lavoro associato a un programma darà origine a una riga.
 
 ```{r}
 programsT <- programsT %>% unnest_longer(works)
@@ -86,7 +86,8 @@ Ora works contiene liste di lunghezze diverse, a seconda delle caratteristiche d
 ```{r}
 programsT %>%
   mutate(works_L=sapply(works,length)) %>%
-  count(works_L)
+  count(works_L) %>%
+  add_tally(n)
 ```
 
 Le liste di lunghezza 3 sono quelle che contengono le intermissions.
@@ -94,7 +95,9 @@ Le liste di lunghezza 3 sono quelle che contengono le intermissions.
 ```{r}
 programsT %>%
   mutate(works_L = sapply(works,length)) %>%
-  filter(works_L == 3)
+  filter(works_L == 3) %>%
+  pull(works) %>%
+  head(5)
 ```
 
 Cerco di capire che cosa contengono.
@@ -108,8 +111,7 @@ works <- programsT %>%
 
 first <- works[[1]]
 
-lapply(works, identical, first)
-identical(first,second)
+identical_to_first <- lapply(works, identical, first)
 
 works4 <- programsT %>%
   mutate(works_L = sapply(works, length)) %>%
@@ -117,11 +119,23 @@ works4 <- programsT %>%
   mutate(works_N = lapply(works, names)) %>%
   pull(works_N)
 
+works4_first <- works4[[1]]
+id_to_first_w4 <- lapply(works4, identical, works4_first)
+every(id_to_first_w4, isTRUE)
+
 works5 <- programsT %>%
   mutate(works_L = sapply(works, length)) %>%
   filter(works_L == 5) %>%
   mutate(works_N = lapply(works, names)) %>%
   pull(works_N)
+
+works5_first <- works5[[1]]
+id_to_first_w5 <- lapply(works5, identical, works5_first)
+every(id_to_first_w5, isTRUE)
+detect_index(id_to_first_w5, isFALSE)
+works5[[18]]
+length(id_to_first_w5)
+sum(unlist(id_to_first_w5))
 
 works6 <- programsT %>%
   mutate(works_L = sapply(works, length)) %>%
@@ -129,40 +143,62 @@ works6 <- programsT %>%
   mutate(works_N = lapply(works, names)) %>%
   pull(works_N)
 
+works6_first <- works6[[1]]
+id_to_first_w6 <- lapply(works6, identical, works6_first)
+every(id_to_first_w6, isTRUE)
+
 ```
 
-Faccio unnest wider di works
+Faccio unnest_wider di works, controllo di aver mantenuto le informazioni di partenza.
 
 ```{r}
-programsT <- programsT %>% unnest_wider(works)
+programsT <- programsT %>% mutate(works_L = sapply(works, length))
+prova <- programsT %>% unnest_wider(works)
+prova %>% filter(works_L == 3) # deve essere 18489
+prova %>% filter(works_L == 4)
+prova %>% filter(works_L == 5)
+prova %>% filter(works_L == 6)
+prova %>% filter(!is.na(conductorName))
+prova
 ```
 
-Quanto lunghe sono le liste in workTitle?
+Controllo la lunghezza delle liste contenute in soloists.
 
 ```{r}
-programsT %>%
-  mutate(workTitle_L = sapply(workTitle, length)) %>%
-  count(workTitle_L)
+# da fare meglio
 ```
 
-Guardo le liste di lunghezza 2
+Faccio unnest_longer() su solisti e quindi unnest_wider().
 
 ```{r}
-programsT %>%
-  mutate(workTitle_L = sapply(workTitle, length)) %>%
-  filter(workTitle_L == 2) %>%
-  separate(workTitle,c("a","b"))
+prova <- unnest_longer(prova, soloists, keep_empty = TRUE) # spiegare perché
+prova <- unnest_wider(prova, soloists) # aumento da 17 a 19 le colonne ? e mi sono anche sistemato il problema del NULL
 ```
+
+Verifico la lunghezza degli elementi contenuti in movement.
 
 ```{r}
-# workTitle ora contiene liste di lunghezza 1?
-programsT %>%
-  mutate(check = sapply(workTitle, length)) %>%
-  mutate(check = (check == 1)) %>%
-  filter(check != TRUE)
+prova %>%
+  mutate(movement_L = sapply(movement, length)) %>%
+  count(movement_L)
 
-programsT %>%
-  mutate(check = sapply(workTitle, length)) %>%
-  filter(check == 2) %>%
-  unnest_wider(workTitle)
+prova %>%
+  mutate(movement_L = sapply(movement, length)) %>%
+  filter(movement_L == 2) %>%
+  pull(movement) %>%
+  tail() %>%
+  str()
+
+prova %>%
+  mutate(abends = sapply(prova$movement, `%in%`, "Des Abends")) %>%
+  unnest(abends)
+
+due <- prova %>%
+  mutate(movement_L = sapply(movement, length)) %>%
+  filter(movement_L == 2)
+
+# capire come fare join, potrei fare unnest wider e poi unire in una nuova colonna
+
 ```
+
+Ora devo lavorare anche su worktitle (dovrei unire eventualmente)
