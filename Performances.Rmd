@@ -14,6 +14,7 @@ library(dplyr)
 library(repurrrsive)
 library(jsonlite)
 library(purrr)
+library(stringr)
 ```
 
 Apro il file JSON, per come è fatto devo accedere al primo elemento e posso quindi caricarlo in un tibble.
@@ -175,30 +176,66 @@ prova <- unnest_longer(prova, soloists, keep_empty = TRUE) # spiegare perché
 prova <- unnest_wider(prova, soloists) # aumento da 17 a 19 le colonne ? e mi sono anche sistemato il problema del NULL
 ```
 
-Verifico la lunghezza degli elementi contenuti in movement.
+Verifico la lunghezza degli elementi contenuti in movement. Ci sono 148 elementi che hanno lunghezza 2.
 
 ```{r}
 prova %>%
   mutate(movement_L = sapply(movement, length)) %>%
   count(movement_L)
+```
 
+Applico la funzione mod_m per sistemare.
+
+```{r}
+mod_m <- function(x) {
+  if (is.null(x)) return (NA)
+  if (length(x) == 1) return (x[[1]])
+  if (length(x) == 2) return (paste(x[[1]], "_", x[[2]]))
+}
+
+prova <- prova %>% mutate(movement = sapply(movement, mod_m))
+```
+
+Ora devo lavorare anche su worktitle, controllo lunghezze.
+
+```{r}
 prova %>%
-  mutate(movement_L = sapply(movement, length)) %>%
-  filter(movement_L == 2) %>%
-  pull(movement) %>%
-  tail() %>%
-  str()
+  mutate(workTitle_L = sapply(workTitle, length)) %>%
+  count(workTitle_L)
+```
 
+Come sono gli elementi di lunghezza 2.
+
+```{r}
 prova %>%
-  mutate(abends = sapply(prova$movement, `%in%`, "Des Abends")) %>%
-  unnest(abends)
+  mutate(workTitle_L = sapply(workTitle, length)) %>%
+  filter(workTitle_L == 2) %>%
+  pull(workTitle)
 
-due <- prova %>%
-  mutate(movement_L = sapply(movement, length)) %>%
-  filter(movement_L == 2)
-
-# capire come fare join, potrei fare unnest wider e poi unire in una nuova colonna
+# ricordarsi quelli strani (esempio quello che contiene Parsifal)
 
 ```
 
-Ora devo lavorare anche su worktitle (dovrei unire eventualmente)
+Applico funzione per sistemarli
+
+```{r}
+mod_w <- function(x) {
+  if (is.null(x)) return (NA)
+  if (length(x) == 1) return (x[[1]])
+  if (length(x) == 2) return (combine_w(x[[1]], x[[2]]))
+}
+
+combine_w <- function(x,y) {
+  if (startsWith(x,",")) {
+    return (paste(y,x))
+  } else {
+    return (paste(x,y))
+  }
+}
+
+prova <- prova %>% mutate(workTitle = sapply(workTitle, mod_w))
+
+prova %>%
+  filter(str_detect(workTitle, "PARSIFAL"))
+```
+
