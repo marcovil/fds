@@ -15,6 +15,7 @@ library(repurrrsive)
 library(jsonlite)
 library(purrr)
 library(stringr)
+library(lubridate)
 ```
 
 Apro il file JSON, per come è fatto devo accedere al primo elemento e posso quindi caricarlo in un tibble.
@@ -184,7 +185,16 @@ prova %>%
   count(movement_L)
 ```
 
-Applico la funzione mod_m per sistemare.
+Guardo a quelli che hanno lunghezza 2.
+
+```{r}
+prova %>%
+  mutate(movement_L = sapply(movement, length)) %>%
+  filter(movement_L == 2)
+```
+
+Applico la funzione mod_m per sistemare. Sostanzialmente serve a concatenare quelli che hanno lunghezza 2.
+Inoltre sostituisco i NULL con NA.
 
 ```{r}
 mod_m <- function(x) {
@@ -236,6 +246,54 @@ combine_w <- function(x,y) {
 prova <- prova %>% mutate(workTitle = sapply(workTitle, mod_w))
 
 prova %>%
-  filter(str_detect(workTitle, "PARSIFAL"))
+  filter(str_detect(workTitle, "PROCESSION"))
+```
+
+Correggo come è scritta la data.
+
+```{r}
+prova %>% separate(Date, into = c("date", "time"), sep = "T") %>%
+  count(time)
+
+# elimino time perché non è attendibile
+prova %>%
+  separate(Date, into = c("date", "time"), sep = "T") %>%
+  unite(new, date, Time, sep = " ") %>%
+  select(-time) %>%
+  mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
+  select(-new) %>%
+  select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
+```
+
+Posso rimuovere la colonna id?
+
+```{r}
+p1 <- prova %>% select(programID, id)
+p2 <- p1
+anti_join(p1, p2, by=c("programID", "id"))
+anti_join(p1, p2, by=c("id", "programID"))
+prova %>% group_by("id") %>% group_by("programID") %>% count()
+inner_join(p1,p2,"id")
+distinctALL <- distinct(p1, programID, id)
+distinctID <- prova %>% distinct(id)
+distinctPID <- prova %>% distinct(programID)
+anti_join(distinctALL,distinctPID)
+str(prova)
+
+all(!is.na(prova$id))
+all(!is.na(prova$programID))
+prova %>% count(id)
+
+```
+
+
+Quanti programmi ci sono nel dataset?
+
+```{r}
+prova %>% group_by(Time) %>% count(sort = TRUE)
+
+prova %>% group_by(Location) %>% count(sort = TRUE)
+
+prova %>% filter(programID == 13158)
 ```
 
