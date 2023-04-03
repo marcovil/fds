@@ -282,10 +282,22 @@ str(prova)
 
 all(!is.na(prova$id))
 all(!is.na(prova$programID))
-prova %>% count(id)
+p2 <- rename(p2,programID2 = programID, id2 = id)
+check <- tibble(p1,p2)
 
+checkf <- function(a,b,c,d) {
+  if (a == b) {
+    if (b == d) {
+      return (TRUE)
+    } else {
+      return (FALSE)
+    }
+  }
+}
+str(check)
+sapply(check, checkf, a = programID, b = id, c = programID2, d = id2)
+pmap(check,checkf)
 ```
-
 
 Quanti programmi ci sono nel dataset?
 
