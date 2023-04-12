@@ -19,6 +19,7 @@ library(lubridate)
 ```
 
 Apro il file JSON, per come è fatto devo accedere al primo elemento e posso quindi caricarlo in un tibble.
+Sono 14.536 liste.
 
 ```{r}
 complete <- read_json("complete.json")
@@ -27,11 +28,11 @@ programsT <- tibble(programs)
 ```
 
 A questo punto ho la possibilità di accedere ai programmi, controllo che siano tutte liste di lunghezza 6.
-Qui dovrei anche controllare che contengono tutte gli stessi nomi...
+<!-- Qui dovrei anche controllare che contengono tutte gli stessi nomi... -->
 
 ```{r}
 programsT %>%
-  mutate(programs_L=sapply(programs,length)) %>%
+  mutate(programs_L = sapply(programs,length)) %>%
   filter(programs_L != 6)
 ```
 
@@ -263,12 +264,32 @@ prova %>%
   mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
   select(-new) %>%
   select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
+# attenzione al warning
 ```
 
 Posso rimuovere la colonna id?
 
 ```{r}
 p1 <- prova %>% select(programID, id)
+p1d <- distinct(p1)
+length(unique(p1$programID)) # 14502 programID unici
+length(unique(p1$id)) # 14507 id unici
+
+# voglio trovare valori di programID che sono associati a più di un id
+p1 %>% group_by(programID) %>% count(id) %>% count(programID, sort = TRUE) # qui ne vedo tre
+
+p1 %>% group_by(id) %>% count(programID) %>% count(id, sort = TRUE)
+
+
+
+
+
+
+
+
+
+
+
 p2 <- p1
 anti_join(p1, p2, by=c("programID", "id"))
 anti_join(p1, p2, by=c("id", "programID"))
