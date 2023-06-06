@@ -28,7 +28,6 @@ programsT <- tibble(programs)
 ```
 
 A questo punto ho la possibilità di accedere ai programmi, controllo che siano tutte liste di lunghezza 6.
-<!-- Qui dovrei anche controllare che contengono tutte gli stessi nomi... -->
 
 ```{r}
 programsT %>%
@@ -181,7 +180,8 @@ combine_w <- function(x,y) {
 
 programsT %>%
   mutate(workTitle = sapply(workTitle, mod_w)) %>%
-  semi_join(wt2ids)
+  semi_join(wt2ids) %>%
+  select(workTitle)
 ```
 
 Eseguo l'operazione e ri-assegno a programsT.
@@ -202,7 +202,7 @@ programsT %>%
 Vedo come sono quelli di lunghezza 2.
 
 ```{r}
-prova %>%
+programsT %>%
   mutate(movement_L = sapply(movement, length)) %>%
   filter(movement_L == 2)
 ```
@@ -227,7 +227,7 @@ programsT %>%
   count(soloists_L)
 ```
 
-Faccio unnest_longer di soloists con opzione keep_empty per tenere anche le righe che contengono liste NULL e vedo che sono tutte liste di lunghezza 3, tranne alcune di lunghezza 0.
+Provo unnest_longer di soloists con opzione keep_empty per tenere anche le righe che contengono liste NULL e vedo che sono tutte liste di lunghezza 3, tranne alcune di lunghezza 0.
 
 ```{r}
 programsT %>%
@@ -269,37 +269,80 @@ programsT <- programsT %>%
   select(-id)
 ```
 
-Correggo come è scritta la data.
+Correggo come è scritta la data, aggiungo anche seasonStart di tipo intero e componenti anno, mese, giorno della data.
 
 ```{r}
-programsT %>% separate(Date, into = c("date", "time"), sep = "T") %>%
-  count(time)
 
-# elimino time perché non è attendibile
-prova %>%
-  separate(Date, into = c("date", "time"), sep = "T") %>%
-  unite(new, date, Time, sep = " ") %>%
-  select(-time) %>%
-  mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
-  select(-new) %>%
-  select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
-# attenzione al warning
-
+#ci sono 5582 righe che contengono None invece dell'orario in formato AM o PM
 programsT %>%
-  mutate(date = sapply(Date,function (x) str_extract(x, "[[:digit:]-]+")))
+  mutate(trovato = str_detect(programsT$Time, "\\d{1,2}:\\d{1,2}[P,A]M")) %>%
+  filter(trovato == FALSE)
 
+# lascio Time com'è, sistemo la data, tenendo solo anno, mese, giorno, aggiungo seasonStart e trasformo tipo intero
+programsT <- programsT %>%
+  mutate(seasonStart = str_extract(season, "\\d+")) %>%
+  mutate(seasonStart = as.integer(seasonStart)) %>%
+  mutate(Date = str_extract(Date, "[[:digit:]-]+")) %>%
+  mutate(Date = ymd(Date)) %>%
+  mutate(Year = year(Date)) %>%
+  mutate(Month = month(Date)) %>%
+  mutate(Day = day(Date)) %>%
+  select(programID, orchestra, season, seasonStart, eventType, Location, Venue, Date, Year, Month, Day, Time, ID, composerName, workTitle, conductorName, soloistName, soloistInstrument, soloistRoles, movement, interval)
+
+```
+
+Quanti concerti a stagione, andamento.
+
+```{r}
 programsT %>%
-  mutate(dt = str_extract(programsT$Date, "[[:digit:]-]+")) %>%
-  mutate(dtt = str_c(dt, " ", programsT$Time)) %>%
-  mutate(dateTime = parse_date_time(dtt, "%y-%m-%d %H:%M%p"))
+  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
+  group_by(Year) %>%
+  count() %>%
+  ggplot() + 
+  geom_point(mapping = aes(x = Year, y = n))
+```
 
-str_extract(x, "[[:digit:]-]+")
+Limitandosi alla subscription season.
 
+```{r}
+programsT %>%
+  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
+  filter(eventType == "Subscription Season") %>%
+  group_by(Year) %>%
+  count() %>%
+  ggplot() + 
+  geom_point(mapping = aes(x = Year, y = n))
+```
+
+```{r}
+programsT %>%
+  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
+  filter(eventType == "Tour") %>%
+  group_by(Year) %>%
+  count() %>%
+  ggplot() + 
+  geom_point(mapping = aes(x = Year, y = n))
+
+```
+
+```{r}
+programsT %>%
+  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
+  filter(eventType == "Tour") %>%
+  group_by(Year) %>%
+  count() %>%
+  filter(n>75)
 ```
 
 
 
 
+Durata delle stagioni.
+
+```{r}
+programsT %>%
+  distinct(eventType)
+```
 
 
 
@@ -553,4 +596,63 @@ prova %>% group_by(Location) %>% count(sort = TRUE)
 
 prova %>% filter(programID == 13158)
 ```
+
+vecchia cosa per date e time
+
+```{r}
+programsT %>% separate(Date, into = c("date", "time"), sep = "T") %>%
+  count(time)
+
+# elimino time perché non è attendibile
+prova %>%
+  separate(Date, into = c("date", "time"), sep = "T") %>%
+  unite(new, date, Time, sep = " ") %>%
+  select(-time) %>%
+  mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
+  select(-new) %>%
+  select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
+# attenzione al warning
+
+programsT %>%
+  mutate(date = sapply(Date,function (x) str_extract(x, "[[:digit:]-]+")))
+
+programsT %>%
+  mutate(dt = str_extract(programsT$Date, "[[:digit:]-]+")) %>%
+  mutate(dtt = str_c(dt, " ", programsT$Time)) %>%
+  mutate(dateTime = parse_date_time(dtt, "%y-%m-%d %I:%M%p"))
+
+programsT %>%
+  mutate(dt = str_extract(programsT$Date, "[[:digit:]-]+")) %>%
+  mutate(date = parse_date(dt)) 
+
+
+  mutate(dtt = str_c(dt, " ", programsT$Time)) %>%
+  mutate(dateTime = parse_date_time(dtt, "%y-%m-%d %I:%M%p"))
+
+
+str_extract(x, "[[:digit:]-]+")
+
+length(str_extract(programsT$Date, "\\d+-\\d+-\\d+"))
+str_extract("1842-12-07T05:00:00Z", "[[:digit:]-]+")
+as_datetime("1842-12-07 8:00PM")
+
+length(str_extract(programsT$Time, "\\d+:\\d+PM"))
+str_extract("8:00PM", "PM")
+is.na(programsT$Time)
+length(programsT$Date
+       
+       )
+
+sum(is.na(c(NA,NA,3)))
+
+
+programsT <- programsT %>%
+  mutate(Time = str_replace(Time, "None", "")) %>%
+  mutate(Date = str_c(str_extract(Date, "[[:digit:]-]+"),Time)) %>%
+  mutate(Date = parse_date_time(Date, c("%y-%m-%d %I:%M%p","%y-%m-%d"))) %>%
+  select(programID, orchestra, season, eventType, Location, Venue, Date, Time, ID, composerName, workTitle, conductorName, soloistName, soloistInstrument, soloistRoles, movement, interval)
+
+
+```
+
 
