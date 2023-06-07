@@ -16,6 +16,8 @@ library(jsonlite)
 library(purrr)
 library(stringr)
 library(lubridate)
+library(modelr)
+library(broom)
 ```
 
 Apro il file JSON, per come è fatto devo accedere al primo elemento e posso quindi caricarlo in un tibble.
@@ -278,7 +280,7 @@ programsT %>%
   mutate(trovato = str_detect(programsT$Time, "\\d{1,2}:\\d{1,2}[P,A]M")) %>%
   filter(trovato == FALSE)
 
-# lascio Time com'è, sistemo la data, tenendo solo anno, mese, giorno, aggiungo seasonStart e trasformo tipo intero
+# lascio Time com'è, sistemo la data, tenendo solo anno, mese, giorno, aggiungo seasonStart (come tipo intero)
 programsT <- programsT %>%
   mutate(seasonStart = str_extract(season, "\\d+")) %>%
   mutate(seasonStart = as.integer(seasonStart)) %>%
@@ -289,6 +291,15 @@ programsT <- programsT %>%
   mutate(Day = day(Date)) %>%
   select(programID, orchestra, season, seasonStart, eventType, Location, Venue, Date, Year, Month, Day, Time, ID, composerName, workTitle, conductorName, soloistName, soloistInstrument, soloistRoles, movement, interval)
 
+```
+
+Divido ID in workID e movementID
+
+```{r}
+programsT <- programsT %>%
+  separate(ID, into = c("workID", "movID"), sep = "\\*") %>%
+  mutate(workID = as.integer(workID)) %>%
+  mutate(movID = as.integer(movID))
 ```
 
 Quanti concerti a stagione, andamento.
@@ -334,14 +345,122 @@ programsT %>%
   filter(n>75)
 ```
 
-
-
-
-Durata delle stagioni.
+Quanti compositori sono stati rappresentati.
 
 ```{r}
 programsT %>%
-  distinct(eventType)
+  filter(!is.na(composerName)) %>%
+  distinct(composerName) %>%
+  count()
+```
+
+Quali sono stati i compositori più rappresentati? Conto quante rappresentazioni sono state fatte per ciascun compositore.
+Considero i lavori, quindi i workID, se nello stesso concerto sono stati rappresentati più movimenti di uno stesso lavoro, il conteggio è comunque uno.
+
+```{r}
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(composerName) %>%
+  count(sort = TRUE)
+
+```
+
+Come si sono evolute le rappresentazioni per compositore negli anni.
+
+```{r}
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(Year,composerName) %>%
+  count() %>%
+ggplot(aes(Year, n, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+```
+Costruisco un modello lineare anno-rappresentazioni per tutti i compositori.
+
+```{r}
+#trovo i compositori che compaiono in un solo anno per poi toglierli
+joy <- programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(composerName) %>%
+  summarise(years = n_distinct(Year)) %>%
+  filter(years == 1)
+
+yc <- programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  anti_join(joy) %>%
+  group_by(composerName,Year) %>%
+  count() %>%
+  group_by(composerName) %>%
+  nest()
+
+yc_model <- function(df) {
+  lm(n ~ Year, data = df)
+}
+
+yc <- yc %>%
+  mutate(model = map(data, yc_model))
+
+yc <- yc %>%
+  mutate(augment = map(model, augment))
+
+models <- unnest(yc, augment)
+
+ggplot(models, mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+
+yearcoeff <- yc %>%
+  mutate(tidied = map(model, tidy)) %>%
+  select(composerName,tidied) %>%
+  unnest(tidied) %>%
+  select(term, estimate) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  select(composerName, Year) %>%
+  arrange(-Year)
+```
+
+
+
+
+```{r}
+yc <- yc %>% 
+  mutate(data = map2(data, model, add_residuals))
+
+resids <- unnest(yc, data)
+
+resids %>%
+  arrange(-resid)
+  group_by(composerName) %>%
+  count() %>%
+  filter(n>50) %>%
+  ungroup() %>%
+  ggplot(aes(Year, resid)) +
+    geom_line(aes(group = composerName), alpha = 1 / 3) + 
+    geom_smooth(se = FALSE) +
+    facet_wrap(~composerName) +
+    theme_classic()
+
+```
+
+
+
+```{r}
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(Year,composerName) %>%
+  count(sort = TRUE)
+```
+
+```{r}
+programsT %>%
+  filter(str_detect(composerName, "Mendelssohn"), Year == 1950) %>%
+  arrange(Date) %>%
+  select(programID,season,eventType,Location,Venue,Date,Time,workID,composerName,workTitle) %>%
+  distinct(eventType,Location,Venue,Date,Time,workID,workTitle)
 ```
 
 
@@ -349,7 +468,12 @@ programsT %>%
 
 
 
-
+```{r}
+library
+ggplot(gapminder, aes(year, lifeExp)) +
+    geom_line(aes(group = country), alpha = 1/3) +
+    theme_classic()
+```
 
 
 
