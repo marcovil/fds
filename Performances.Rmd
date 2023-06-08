@@ -18,6 +18,9 @@ library(stringr)
 library(lubridate)
 library(modelr)
 library(broom)
+library(tibble)
+library(ggplot2)
+library(mgcv)
 ```
 
 Apro il file JSON, per come è fatto devo accedere al primo elemento e posso quindi caricarlo in un tibble.
@@ -41,20 +44,28 @@ Posso quindi espandere i programmi.
 
 ```{r}
 programsT <- programsT %>% unnest_wider(programs)
+programsT %>% distinct(programID)
+programsT %>% select(programID) %>% n_distinct() # ci sono 14531 programmi
 ```
 
-Nella maggior parte dei casi a un programma è associato un concerto, ma non è sempre così. 
+Nella maggior parte dei casi a un programma è associato un concerto, ma non è sempre così. In totale ci sono 22525 concerti.
 
 ```{r}
 programsT %>%
   mutate(concerts_L=sapply(concerts,length)) %>%
-  count(concerts_L)
+  count(concerts_L) %>%
+  mutate(concertN = concerts_L * n) %>%
+  mutate(concertsT = cumsum(concertN)) %>%
+  arrange(-concertsT)
 ```
 
-Espando i concerti, ottengo una riga per ogni concerto.
+Espando i concerti, ottengo una riga per ogni concerto. Passo da 14.536 a 22.525 righe. Aggiungo anche una colonna concertID. Passo a 7 colonne.
 
 ```{r}
 programsT <- programsT %>% unnest_longer(concerts)
+nrow(programsT)
+programsT <- rowid_to_column(programsT,var = "concertID")
+programsT <- select(programsT,id,programID,orchestra,season,concertID,concerts,works)
 ```
 
 Verifico che ogni concerto abbia 5 campi.
@@ -69,29 +80,56 @@ Posso espandere con unnest_wider. Allargo il tibble di 4 colonne, al posto di co
 
 ```{r}
 programsT <- programsT %>% unnest_wider(concerts)
+
 ```
 
-Ogni programma contiene un certo numero di lavori (works).
+Come si può vedere, un programma può contenere più concerti.
+
+```{r}
+programsT %>% group_by(programID) %>% count(sort = TRUE)
+```
+
+Per esempio il programma 10700 contiene 16 concerti. In questo caso vediamo anche che di alcuni concerti non è indicata l'ora.
+Per questo motivo ho introdotto un concertID, se in seguito mi fossi limitato a identificare il concerto con eventType, Location, Venue, Date, Time, avrei perso alcuni concerti.
 
 ```{r}
 programsT %>%
-  mutate(works_L=sapply(works,length)) %>%
-  count(works_L)
+  filter(programID == 10700)
 ```
 
-Posso utilizzare unnest_longer, ogni lavoro associato a un programma darà origine a una riga.
-
-```{r}
-programsT <- programsT %>% unnest_longer(works)
-```
-
-Ora works contiene liste di lunghezze diverse, a seconda delle caratteristiche del lavoro. 
+Ogni programma contiene un certo numero di lavori (works). In totale ci sono 125.224 works (si tratta di works che possono essere ripetuti in diversi programs).	
 
 ```{r}
 programsT %>%
   mutate(works_L=sapply(works,length)) %>%
   count(works_L) %>%
-  add_tally(n)
+  mutate(works_N = works_L * n) %>%
+  mutate(works_T = cumsum(works_N)) %>%
+  arrange(-works_T)
+```
+
+Ci sono dei program che hanno 0 works, che cosa sono? Si tratta di eventi che non prevedono musica o dei quali mancano informazioni.
+
+```{r}
+programsT %>%
+  mutate(works_L=sapply(works,length)) %>%
+  filter(works_L == 0)
+```
+
+Posso utilizzare unnest_longer, ogni lavoro associato a un programma darà origine a una riga. Devo usare l'opzione keep_empty TRUE per non perdere le righe con zero works.
+Quindi il tibble passerà a 125.224 + 29 righe, ovvero 125.253.
+
+```{r}
+programsT <- programsT %>% unnest_longer(works, keep_empty = TRUE)
+programsT %>% filter(programID == 13665)
+```
+
+Ora works contiene liste di lunghezze diverse, a seconda delle caratteristiche del work compreso. 
+
+```{r}
+programsT %>%
+  mutate(works_L=sapply(works,length)) %>%
+  count(works_L)
 ```
 
 Le liste di lunghezza 3 sono quelle che contengono le intermissions.
@@ -131,7 +169,7 @@ programsT %>%
   unnest_wider(works)
 ```
 
-Faccio unnest_wider di works. Passo da 10 colonne a 16 (al posto di works si aggiungono tutte le colonne comuni ai diversi works, ovvero ID, composerName, workTitle, movement, conductorName, soloists, interval)
+Faccio unnest_wider di works. Passo da 11 colonne a 17 (al posto di works si aggiungono tutte le colonne comuni ai diversi works, ovvero ID, composerName, workTitle, movement, conductorName, soloists, interval)
 
 ```{r}
 programsT <- programsT %>% unnest_wider(works)
@@ -151,7 +189,8 @@ Come sono gli elementi di lunghezza 2.
 programsT %>%
   mutate(workTitle_L = sapply(workTitle, length)) %>%
   filter(workTitle_L == 2) %>%
-  pull(workTitle)
+  pull(workTitle) %>%
+  head(3)
 ```
 
 Mi salvo i program ID per ritrovarli dopo la modifica.
@@ -221,15 +260,18 @@ mod_m <- function(x) {
 programsT <- programsT %>% mutate(movement = sapply(movement, mod_m))
 ```
 
-Controllo la lunghezza delle liste contenute in soloists.
+Controllo la lunghezza delle liste contenute in soloists. Ho 89.321 potenziali righe di informazioni su solisti + 85.122 righe nulle.
 
 ```{r}
 programsT %>%
   mutate(soloists_L = sapply(soloists, length)) %>%
-  count(soloists_L)
+  count(soloists_L) %>%
+  mutate(soloists_N = soloists_L * n) %>%
+  mutate(soloists_T = cumsum(soloists_N)) %>%
+  filter(soloists_L == 0 | soloists_L == max(soloists_L))
 ```
 
-Provo unnest_longer di soloists con opzione keep_empty per tenere anche le righe che contengono liste NULL e vedo che sono tutte liste di lunghezza 3, tranne alcune di lunghezza 0.
+Provo unnest_longer di soloists con opzione keep_empty per tenere anche le righe che contengono liste NULL e vedo che sono di lunghezza 0 o 3.
 
 ```{r}
 programsT %>%
@@ -238,7 +280,31 @@ programsT %>%
   count(soloists_L)
 ```
 
-Faccio quindi unnest_longer, poi unnest_wider, il numero di colonne passa da 16 a 18 (soloistName, soloistInstrument e soloistRoles al posto di soloists).
+Ce ne sono cinque che sono di lunghezza 1, ma poi NULL.
+
+```{r}
+programsT %>%
+  mutate(soloists_L = sapply(soloists, length)) %>%
+  filter(soloists_L != 0) %>%
+  unnest_longer(soloists, keep_empty = TRUE) %>%
+  mutate(soloists_L2 = sapply(soloists, length)) %>%
+  filter(soloists_L2 == 0)
+```
+
+Per esempio.
+
+```{r}
+programsT %>%
+  filter(programID == 14489)
+```
+
+
+```{r}
+programsT %>%
+  filter(concertID == 1)
+```
+
+Faccio quindi unnest_longer, poi unnest_wider, il numero di colonne passa da 17 a 19 (soloistName, soloistInstrument e soloistRoles al posto di soloists).
 
 ```{r}
 programsT <- programsT %>%
@@ -247,8 +313,9 @@ programsT <- programsT %>%
 programsT
 ```
 
-id rappresenta il GUID, che fa parte dell'indirizzo a cui è possibile vedere il programma online (archives.nyphil.org/index.php/artifact/GUID/fullview). posso buttarlo?
-ci sono tre programID che sono associati a più GUID
+id rappresenta il GUID, che fa parte dell'indirizzo a cui è possibile vedere il programma online (archives.nyphil.org/index.php/artifact/GUID/fullview).
+ci sono tre programID che sono associati a più GUID.
+Tengo comunque la colonna id.
 
 ```{r}
 ids <- programsT %>%
@@ -264,32 +331,23 @@ semi_join(programsT, ids) %>%
   select(id, programID)
 ```
 
-Posso quindi eliminare la colonna id.
-
-```{r}
-programsT <- programsT %>%
-  select(-id)
-```
-
-Correggo come è scritta la data, aggiungo anche seasonStart di tipo intero e componenti anno, mese, giorno della data.
+Correggo come è scritta la data, aggiungo anche componenti anno, mese, giorno della data.
 
 ```{r}
 
-#ci sono 5582 righe che contengono None invece dell'orario in formato AM o PM
+#ci sono 5591 righe che contengono None invece dell'orario in formato AM o PM
 programsT %>%
   mutate(trovato = str_detect(programsT$Time, "\\d{1,2}:\\d{1,2}[P,A]M")) %>%
   filter(trovato == FALSE)
 
-# lascio Time com'è, sistemo la data, tenendo solo anno, mese, giorno, aggiungo seasonStart (come tipo intero)
+# lascio Time com'è, sistemo la data, tenendo anche anno, mese, giorno
 programsT <- programsT %>%
-  mutate(seasonStart = str_extract(season, "\\d+")) %>%
-  mutate(seasonStart = as.integer(seasonStart)) %>%
   mutate(Date = str_extract(Date, "[[:digit:]-]+")) %>%
   mutate(Date = ymd(Date)) %>%
   mutate(Year = year(Date)) %>%
   mutate(Month = month(Date)) %>%
   mutate(Day = day(Date)) %>%
-  select(programID, orchestra, season, seasonStart, eventType, Location, Venue, Date, Year, Month, Day, Time, ID, composerName, workTitle, conductorName, soloistName, soloistInstrument, soloistRoles, movement, interval)
+  select(id, programID, orchestra, season, concertID, eventType, Location, Venue, Date, Year, Month, Day, Time, ID, composerName, workTitle, conductorName, soloistName, soloistInstrument, soloistRoles, movement, interval)
 
 ```
 
@@ -302,48 +360,146 @@ programsT <- programsT %>%
   mutate(movID = as.integer(movID))
 ```
 
+Creo un tibble con solo i concerti.
+
+```{r}
+concerts <- programsT %>%
+  distinct(concertID, eventType, Location, Venue, Date, Year, Month, Day, Time)
+  
+```
+
 Quanti concerti a stagione, andamento.
 
 ```{r}
-programsT %>%
-  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
+concerts %>%
   group_by(Year) %>%
   count() %>%
-  ggplot() + 
-  geom_point(mapping = aes(x = Year, y = n))
+  ggplot(mapping = aes(x = Year, y = n)) + 
+  geom_point() +
+  geom_smooth()
 ```
 
-Limitandosi alla subscription season.
+Che tipi di concerti ci sono.
 
 ```{r}
-programsT %>%
-  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
+concerts %>%
+  group_by(eventType) %>%
+  count() %>%
+  filter(n > 100) %>%
+  ggplot(aes(x = n, y = eventType)) +
+  geom_bar(stat = "identity")
+```
+
+Andamento limitandosi alla stagione regolare.
+
+```{r}
+concerts %>%
   filter(eventType == "Subscription Season") %>%
   group_by(Year) %>%
   count() %>%
-  ggplot() + 
-  geom_point(mapping = aes(x = Year, y = n))
+  ggplot(mapping = aes(x = Year, y = n)) + 
+  geom_point() +
+  geom_smooth()
+```
+
+Andamento negli anni delle altre tipologie di concerti.
+
+```{r}
+concerts %>%
+  filter(eventType != "Subscription Season") %>%
+  group_by(Year) %>%
+  count() %>%
+  ggplot(mapping = aes(x = Year, y = n)) + 
+  geom_point() +
+  geom_smooth()
+```
+
+Mi concentro sul periodo che va dal 1975 ad oggi.
+
+```{r}
+concerts %>%
+  filter(Year >= 1975 & Year < 2020) %>%
+  mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
+  group_by(Year,group) %>%
+  count() %>%
+  ggplot(aes(x = Year, y = n, colour = group)) +
+  geom_point() +
+  geom_smooth()
 ```
 
 ```{r}
-programsT %>%
-  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
-  filter(eventType == "Tour") %>%
-  group_by(Year) %>%
-  count() %>%
-  ggplot() + 
-  geom_point(mapping = aes(x = Year, y = n))
+concerts %>%
+  filter(Year >= 1975 & Year < 2020) %>%
+  mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
+  group_by(Year,group) %>%
+  count()
+```
 
+Quali sono gli eventType forti dal 1990 in poi?
+
+```{r}
+concerts %>%
+  filter(Year >= 1990 & Year < 2020) %>%
+  filter(eventType != "Subscription Season") %>%
+  group_by(Year,eventType) %>%
+  count() %>%
+  ggplot(aes(x = Year, y = n, color = eventType)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+```
+```{r}
+concerts %>%
+  filter(Year >= 1990  & Year < 2020) %>%
+  filter(eventType != "Subscription Season") %>%
+  group_by(Year,eventType) %>%
+  count() %>%
+  filter(n > 10) %>%
+  ggplot(aes(x = Year, y = n, color = eventType)) +
+  geom_line(alpha = 1/2)
+```
+
+1990-2020
+
+```{r}
+concerts %>%
+  filter(Year >= 1990 & Year < 2020) %>%
+  filter(eventType != "Subscription Season") %>%
+  group_by(Year,eventType) %>%
+  count() %>%
+  filter(n>5) %>%
+  ggplot(aes(x = Year, y = n, color = eventType)) +
+  geom_line() +
+  facet_wrap(~eventType)
 ```
 
 ```{r}
-programsT %>%
-  distinct(seasonStart,eventType,Location,Venue,Date,Year,Month,Day,Time) %>%
+concerts %>%
   filter(eventType == "Tour") %>%
   group_by(Year) %>%
   count() %>%
-  filter(n>75)
+  ggplot(aes(x = Year, y = n)) +
+  geom_line() +
+  geom_smooth()
 ```
+
+```{r}
+concerts %>%
+  filter(eventType == "Subscription Season") %>%
+  group_by(Year) %>%
+  count() %>%
+  ggplot(aes(x = Year, y = n)) +
+  geom_line()
+```
+
+```{r}
+concerts %>%
+  filter(eventType == "Subscription Season") %>%
+  filter(Year >= 1910 & Year <= 1930) %>%
+  group_by(Year) %>%
+  count() %>%
+  ggplot(aes(x = Year, y = n)) +
+  geom_line()
+```
+
 
 Quanti compositori sono stati rappresentati.
 
@@ -440,6 +596,135 @@ mostvar <- models %>%
     difference = end - start
   ) %>%
   arrange(-difference) %>%
+  head(15)
+
+# li plotto
+models %>%
+  semi_join(mostvar) %>%
+  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+# provo a plottare i valori reali con modello
+unnest(yc, c(data,augment), names_sep = "_") %>%
+semi_join(select(mostvar,composerName)) %>%
+select(composerName,data_Year,data_n,augment_.fitted) %>%
+ggplot(mapping = aes(x = data_Year, y = data_n, color = composerName)) +
+  geom_line(mapping = aes(x = data_Year, y = data_n, color = composerName), alpha = 1/2) +
+  geom_line(mapping = aes(x = data_Year, y = augment_.fitted), color = "blue") +
+  facet_wrap(vars(composerName))
+
+ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+
+
+models %>%
+  filter(.fitted > 20) %>%
+  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+minoridiuno <- yc %>%
+  mutate(tidied = map(model, tidy)) %>%
+  select(composerName,tidied) %>%
+  unnest(tidied) %>%
+  select(term, estimate) %>%
+  mutate(term = str_replace(term, "\\(Intercept\\)", "Intercept")) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  ungroup() %>%
+  select(composerName, Intercept, Year) %>%
+  filter(Year < 1)
+
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  anti_join(minoridiuno, by = join_by(composerName)) %>%
+  group_by(Year,composerName) %>%
+  count() %>%
+ggplot(aes(Year, n, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+```
+
+Vedo come sono i residui.
+
+```{r}
+yc <- yc %>% 
+  mutate(data = map2(data, model, add_residuals))
+
+resids <- unnest(yc, data)
+
+resids %>%
+  group_by(composerName)
+  
+yc <- yc %>% 
+  mutate(glance = map(model, broom::glance))
+  
+glance = unnest(yc, glance)
+
+glance %>%
+  arrange(r.squared)
+  
+bad_fit <- filter(glance, r.squared < 0.001)
+
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(composerName,Year) %>%
+  count() %>%
+  semi_join(bad_fit, by = "composerName") %>%
+  ggplot(aes(Year, n, colour = composerName)) +
+    geom_line() +
+  facet_wrap(~composerName)
+
+  count() %>%
+  filter(n>50) %>%
+  ungroup() %>%
+  ggplot(aes(Year, resid)) +
+    geom_line(aes(group = composerName), alpha = 1 / 3) + 
+    geom_smooth(se = FALSE) +
+    facet_wrap(~composerName) +
+    theme_classic()
+
+```
+
+```{r}
+#trovo i compositori che compaiono in solo 5 anni o meno per poi toglierli
+fiveorless <- programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(composerName) %>%
+  summarise(years = n_distinct(Year)) %>%
+  filter(years <= 5)
+
+yc <- programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  anti_join(fiveorless) %>%
+  group_by(composerName,Year) %>%
+  count() %>%
+  group_by(composerName) %>%
+  nest()
+
+yc_model <- function(df) {
+  gam(n ~ Year, data = df)
+}
+
+yc <- yc %>%
+  mutate(model = map(data, yc_model))
+
+yc <- yc %>%
+  mutate(augment = map(model, augment))
+
+models <- unnest(yc, augment)
+
+# 10 modelli che variano di più
+mostvar <- models %>%
+  group_by(composerName) %>%
+  summarise(
+    start = min(.fitted),
+    end = max(.fitted),
+    difference = end - start
+  ) %>%
+  arrange(-difference) %>%
   head(10)
 
 # li plotto
@@ -488,34 +773,57 @@ ggplot(aes(Year, n, color = composerName)) +
 
 ```
 
+
+
+
+
+
+
+
+
+
+
+
 ```{r}
-ciapa = c("(Intercept)","(Intercept)","(Intercept)")
-poco <- str_replace(ciapa,"\\(","VAFFA")
+concerts <-
+  programsT %>%
+  select(eventType,Location,Venue,Date,Year,Month,Day,Time)
+
+# ci sono 22407 concerti
+concerts <- 
+  concerts %>%
+  unique()
+```
+
+che tipo di concerti ci sono
+
+```{r}
+ggplot(data = concerts) +
+  geom_bar(mapping = aes(y = eventType))
+```
+
+```{r}
+concerts %>%
+  count(Location, sort = TRUE)
+```
+
+```{r}
+ggplot(concerts) +
+  geom_bar(mapping = aes(x = month(Date)))
+```
 
 
+```{r}
+concerts %>%
+  filter(Location == "Ann Arbor, MI") %>%
+  arrange(Date)
 ```
 
 
 
-```{r}
-yc <- yc %>% 
-  mutate(data = map2(data, model, add_residuals))
 
-resids <- unnest(yc, data)
 
-resids %>%
-  arrange(-resid)
-  group_by(composerName) %>%
-  count() %>%
-  filter(n>50) %>%
-  ungroup() %>%
-  ggplot(aes(Year, resid)) +
-    geom_line(aes(group = composerName), alpha = 1 / 3) + 
-    geom_smooth(se = FALSE) +
-    facet_wrap(~composerName) +
-    theme_classic()
 
-```
 
 
 
