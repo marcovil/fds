@@ -368,6 +368,120 @@ concerts <- programsT %>%
   
 ```
 
+Venue negli anni.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_line(alpha = 1/3, show.legend = FALSE)
+```
+Venue per anno.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  mutate(
+    max = max(perc),
+    min = min(perc)
+  ) %>%
+  filter(perc == max) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_point(alpha = 1/3)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  filter(Year == 1901)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  filter(Year >= 1875 & Year <= 1925) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_line(alpha = 1/3, show.legend = FALSE)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_point(alpha = 1/3, show.legend = FALSE)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  group_by(Venue, .add = TRUE) %>%
+  count()
+```
+
+Locations per anno. La più presente.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Location) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  mutate(
+    max = max(perc),
+    min = min(perc)
+  ) %>%
+  filter(perc == max) %>%
+  ggplot(aes(x = Year, y = n, color = Location)) +
+    geom_point(alpha = 1/3)
+```
+
+Le seconde location per anno.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Location) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  mutate (
+    first = max(perc),
+    second = nth(perc,2)
+  ) %>%
+  filter(perc == second) %>%
+  ggplot(aes(x = Year, y = n, color = Location)) +
+    geom_jitter(alpha = 1/3, show.legend = FALSE)
+```
+
+Quante Location per anno.
+
+```{r}
+concerts %>%
+  distinct(Year,Location) %>%
+  group_by(Year) %>%
+  count()
+```
+
+Date.
+
+```{r}
+concerts %>%
+  group_by(Month, Day) %>%
+  summarise(n = n()) %>%
+  arrange(-n)
+```
+
+
+
+
+
+
 Quanti concerti a stagione, andamento.
 
 ```{r}
@@ -1158,5 +1272,60 @@ programsT <- programsT %>%
 
 
 ```
+
+La colonna "interval" contiene intermission di vari tipi.
+
+```{r}
+intervalNA <- programsT %>%
+  filter(!is.na(interval)) %>%
+  count()
+
+intervalNome <- programsT %>%
+  filter(str_detect(interval, "Intermission")) %>%
+  count()
+  
+intervalNA == intervalNome
+```
+
+Compositori & direttori.
+
+```{r}
+cc <- programsT %>%
+  filter(is.na(interval)) %>%
+  distinct(concertID, Date, composerName, workTitle, conductorName)
+  
+cc %>%
+  group_by(conductorName) %>%
+  n_distinct(Date)
+
+cc %>%
+  filter(is.na(composerName))
+  
+programsT %>%
+  filter(concertID == 577)
+```
+
+Primo e ultimo concerto per direttori.
+
+```{r}
+cc %>%
+  filter(!is.na(conductorName), conductorName != "Not conducted") %>%
+  group_by(conductorName) %>%
+  summarise (
+    first = min(Date),
+    last = max(Date),
+    span = last - first + 1
+  ) %>%
+  arrange(-span)
+
+cc %>%
+  filter(conductorName == "Abbado, Roberto") 
+
+cc %>%
+  filter(conductorName == "Ravel, Maurice")
+
+```
+
+
 
 
