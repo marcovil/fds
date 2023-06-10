@@ -1305,7 +1305,7 @@ programsT %>%
   filter(concertID == 577)
 ```
 
-Primo e ultimo concerto per direttori.
+Primo e ultimo concerto per direttori. Densità di concerti.
 
 ```{r}
 cc %>%
@@ -1319,10 +1319,19 @@ cc %>%
   arrange(-span)
 
 cc %>%
+  filter(!is.na(conductorName), conductorName != "Not conducted") %>%
+  distinct(concertID,conductorName) %>%
+  group_by(conductorName) %>%
+  count()
+
+cc %>%
   filter(conductorName == "Abbado, Roberto") 
 
 cc %>%
   filter(conductorName == "Ravel, Maurice")
+
+cc %>%
+  filter(conductorName == "Alsop, Marin")
 
 ```
 
