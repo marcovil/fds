@@ -1635,9 +1635,6 @@ Come sono composti i repertori dei conduttori? Considero i lavori e non i movime
 
 ```{r}
 ccseason %>%
-  filter(conductorName == " ")
-
-ccseason %>%
   group_by(conductorName,composerName) %>%
   count() %>%
   group_by(conductorName) %>%
@@ -1690,4 +1687,56 @@ ccseason %>%
   arrange(-total)
 ```
 
+
+```{r}
+perctime <- ccseason %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  mutate(year = year(Date)) %>%
+  group_by(year) %>%
+  count(conductorName,composerName) %>%
+  group_by(year,conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  ungroup()
+
+nested_pt <- perctime %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+nested_pt$data[[994]]
+modelf <- function(df) {
+  lm(perc ~ year, data = df)
+}
+
+modelf2 <- function(df) {
+  glm(count ~ year, data = df)
+}
+
+nested_pt_models <- 
+  nested_pt %>%
+  mutate(model = map(data, modelf))
+
+nested_pt_models <- 
+  nested_pt %>%
+  mutate(model = map(data, modelf2))
+
+
+extract_year <- function(df) {
+  summary(df)$coefficients
+}
+
+top <- nested_pt_models %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "year") %>%
+  filter(p.value < 0.05)
+
+perctime %>%
+  inner_join(top, by = c("conductorName","composerName")) %>%
+  ggplot(aes(year, perc, group = conductorName, color = composerName)) +
+  geom_line(show.legend = FALSE)
+
+
+  
+```
 
