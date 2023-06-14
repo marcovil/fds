@@ -522,6 +522,7 @@ Costruisco un modello lineare anno-rappresentazioni per tutti i compositori. Tol
 
 ```{r}
 tenorless <- ccseason %>%
+  filter(eventType == "Subscription Season") %>%
   filter(!is.na(composerName)) %>%
   mutate(year = year(Date)) %>%
   group_by(composerName) %>%
@@ -529,6 +530,7 @@ tenorless <- ccseason %>%
   filter(years <= 10)
 
 yc <- ccseason %>%
+  filter(eventType == "Subscription Season") %>%
   filter(!is.na(composerName)) %>%
   mutate(year = year(Date)) %>%
   anti_join(tenorless) %>%
@@ -666,6 +668,7 @@ Stessa cosa ma lavorando con le percentuali.
 ```{r}
 ccseason %>%
   mutate(year = year(Date)) %>%
+  filter(eventType == "Subscription Season") %>%
   filter(!is.na(composerName)) %>%
   group_by(year,composerName) %>%
   count() %>%
