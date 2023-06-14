@@ -1,0 +1,709 @@
+---
+title: "Old"
+author: "Marco Villotta"
+date: "2023-06-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+vecchia cosa per date e time
+
+```{r}
+programsT %>% separate(Date, into = c("date", "time"), sep = "T") %>%
+  count(time)
+
+# elimino time perché non è attendibile
+prova %>%
+  separate(Date, into = c("date", "time"), sep = "T") %>%
+  unite(new, date, Time, sep = " ") %>%
+  select(-time) %>%
+  mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
+  select(-new) %>%
+  select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
+# attenzione al warning
+
+programsT %>%
+  mutate(date = sapply(Date,function (x) str_extract(x, "[[:digit:]-]+")))
+
+programsT %>%
+  mutate(dt = str_extract(programsT$Date, "[[:digit:]-]+")) %>%
+  mutate(dtt = str_c(dt, " ", programsT$Time)) %>%
+  mutate(dateTime = parse_date_time(dtt, "%y-%m-%d %I:%M%p"))
+
+programsT %>%
+  mutate(dt = str_extract(programsT$Date, "[[:digit:]-]+")) %>%
+  mutate(date = parse_date(dt)) 
+
+
+  mutate(dtt = str_c(dt, " ", programsT$Time)) %>%
+  mutate(dateTime = parse_date_time(dtt, "%y-%m-%d %I:%M%p"))
+
+
+str_extract(x, "[[:digit:]-]+")
+
+length(str_extract(programsT$Date, "\\d+-\\d+-\\d+"))
+str_extract("1842-12-07T05:00:00Z", "[[:digit:]-]+")
+as_datetime("1842-12-07 8:00PM")
+
+length(str_extract(programsT$Time, "\\d+:\\d+PM"))
+str_extract("8:00PM", "PM")
+is.na(programsT$Time)
+length(programsT$Date
+       
+       )
+
+sum(is.na(c(NA,NA,3)))
+
+
+programsT <- programsT %>%
+  mutate(Time = str_replace(Time, "None", "")) %>%
+  mutate(Date = str_c(str_extract(Date, "[[:digit:]-]+"),Time)) %>%
+  mutate(Date = parse_date_time(Date, c("%y-%m-%d %I:%M%p","%y-%m-%d"))) %>%
+  select(programID, orchestra, season, eventType, Location, Venue, Date, Time, ID, composerName, workTitle, conductorName, soloistName, soloistInstrument, soloistRoles, movement, interval)
+```
+
+
+
+Cerco di capire che cosa contengono.
+
+```{r}
+works <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 3) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+first <- works[[1]]
+
+identical_to_first <- lapply(works, identical, first)
+
+works4 <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 4) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+works4_first <- works4[[1]]
+id_to_first_w4 <- lapply(works4, identical, works4_first)
+every(id_to_first_w4, isTRUE)
+
+works5 <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 5) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+works5_first <- works5[[1]]
+id_to_first_w5 <- lapply(works5, identical, works5_first)
+every(id_to_first_w5, isTRUE)
+detect_index(id_to_first_w5, isFALSE)
+works5[[18]]
+length(id_to_first_w5)
+sum(unlist(id_to_first_w5))
+
+works6 <- programsT %>%
+  mutate(works_L = sapply(works, length)) %>%
+  filter(works_L == 6) %>%
+  mutate(works_N = lapply(works, names)) %>%
+  pull(works_N)
+
+works6_first <- works6[[1]]
+id_to_first_w6 <- lapply(works6, identical, works6_first)
+every(id_to_first_w6, isTRUE)
+
+```
+
+Faccio unnest_wider di works, controllo di aver mantenuto le informazioni di partenza.
+
+```{r}
+programsT <- programsT %>% mutate(works_L = sapply(works, length))
+prova <- programsT %>% unnest_wider(works)
+prova %>% filter(works_L == 3) # deve essere 18489
+prova %>% filter(works_L == 4)
+prova %>% filter(works_L == 5)
+prova %>% filter(works_L == 6)
+prova %>% filter(!is.na(conductorName))
+prova
+```
+
+Controllo la lunghezza delle liste contenute in soloists.
+
+```{r}
+# da fare meglio
+```
+
+Faccio unnest_longer() su solisti e quindi unnest_wider().
+
+```{r}
+prova <- unnest_longer(prova, soloists, keep_empty = TRUE) # spiegare perché
+prova <- unnest_wider(prova, soloists) # aumento da 17 a 19 le colonne ? e mi sono anche sistemato il problema del NULL
+```
+
+Verifico la lunghezza degli elementi contenuti in movement. Ci sono 148 elementi che hanno lunghezza 2.
+
+```{r}
+prova %>%
+  mutate(movement_L = sapply(movement, length)) %>%
+  count(movement_L)
+```
+
+Guardo a quelli che hanno lunghezza 2.
+
+```{r}
+prova %>%
+  mutate(movement_L = sapply(movement, length)) %>%
+  filter(movement_L == 2)
+```
+
+
+
+
+
+Applico funzione per sistemarli
+
+```{r}
+mod_w <- function(x) {
+  if (is.null(x)) return (NA)
+  if (length(x) == 1) return (x[[1]])
+  if (length(x) == 2) return (combine_w(x[[1]], x[[2]]))
+}
+
+combine_w <- function(x,y) {
+  if (startsWith(x,",")) {
+    return (paste(y,x))
+  } else {
+    return (paste(x,y))
+  }
+}
+
+prova <- prova %>% mutate(workTitle = sapply(workTitle, mod_w))
+
+prova %>%
+  filter(str_detect(workTitle, "PROCESSION"))
+```
+
+Correggo come è scritta la data.
+
+```{r}
+prova %>% separate(Date, into = c("date", "time"), sep = "T") %>%
+  count(time)
+
+# elimino time perché non è attendibile
+prova %>%
+  separate(Date, into = c("date", "time"), sep = "T") %>%
+  unite(new, date, Time, sep = " ") %>%
+  select(-time) %>%
+  mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
+  select(-new) %>%
+  select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
+# attenzione al warning
+```
+
+Posso rimuovere la colonna id?
+
+```{r}
+p1 <- prova %>% select(programID, id)
+p1d <- distinct(p1)
+length(unique(p1$programID)) # 14502 programID unici
+length(unique(p1$id)) # 14507 id unici
+
+# voglio trovare valori di programID che sono associati a più di un id
+p1 %>% group_by(programID) %>% count(id) %>% count(programID, sort = TRUE) # qui ne vedo tre
+
+p1 %>% group_by(id) %>% count(programID) %>% count(id, sort = TRUE)
+
+
+
+
+
+
+
+
+
+
+
+p2 <- p1
+anti_join(p1, p2, by=c("programID", "id"))
+anti_join(p1, p2, by=c("id", "programID"))
+prova %>% group_by("id") %>% group_by("programID") %>% count()
+inner_join(p1,p2,"id")
+distinctALL <- distinct(p1, programID, id)
+distinctID <- prova %>% distinct(id)
+distinctPID <- prova %>% distinct(programID)
+anti_join(distinctALL,distinctPID)
+str(prova)
+
+all(!is.na(prova$id))
+all(!is.na(prova$programID))
+p2 <- rename(p2,programID2 = programID, id2 = id)
+check <- tibble(p1,p2)
+
+checkf <- function(a,b,c,d) {
+  if (a == b) {
+    if (b == d) {
+      return (TRUE)
+    } else {
+      return (FALSE)
+    }
+  }
+}
+str(check)
+sapply(check, checkf, a = programID, b = id, c = programID2, d = id2)
+pmap(check,checkf)
+```
+
+
+```{r}
+
+# 10 modelli che variano di più
+mostvar <- models %>%
+  group_by(composerName) %>%
+  summarise(
+    start = min(.fitted),
+    end = max(.fitted),
+    difference = end - start
+  ) %>%
+  arrange(-difference) %>%
+  head(15)
+
+# li plotto
+models %>%
+  semi_join(mostvar) %>%
+  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+# provo a plottare i valori reali con modello
+unnest(yc, c(data,augment), names_sep = "_") %>%
+semi_join(select(mostvar,composerName)) %>%
+select(composerName,data_Year,data_n,augment_.fitted) %>%
+ggplot(mapping = aes(x = data_Year, y = data_n, color = composerName)) +
+  geom_line(mapping = aes(x = data_Year, y = data_n, color = composerName), alpha = 1/2) +
+  geom_line(mapping = aes(x = data_Year, y = augment_.fitted), color = "blue") +
+  facet_wrap(vars(composerName))
+
+ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+
+
+models %>%
+  filter(.fitted > 20) %>%
+  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+minoridiuno <- yc %>%
+  mutate(tidied = map(model, tidy)) %>%
+  select(composerName,tidied) %>%
+  unnest(tidied) %>%
+  select(term, estimate) %>%
+  mutate(term = str_replace(term, "\\(Intercept\\)", "Intercept")) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  ungroup() %>%
+  select(composerName, Intercept, Year) %>%
+  filter(Year < 1)
+
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  anti_join(minoridiuno, by = join_by(composerName)) %>%
+  group_by(Year,composerName) %>%
+  count() %>%
+ggplot(aes(Year, n, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+
+```
+
+
+
+Quali compositori sono stati rappresentati più a lungo?
+
+```{r}
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(composerName) %>%
+  summarise(
+    first = min(Date),
+    last = max(Date),
+    timeSpan = (last - first) + 1
+  ) %>%
+  arrange(-timeSpan)
+```
+
+Densità di rappresentazioni.
+
+```{r}
+#da fare
+```
+```
+
+
+Quanti compositori sono stati rappresentati.
+
+```{r}
+programsT %>%
+  filter(!is.na(composerName)) %>%
+  distinct(composerName) %>%
+  count()
+```
+
+Quali sono stati i compositori più rappresentati? Conto quante rappresentazioni sono state fatte per ciascun compositore.
+Considero i lavori, quindi i workID, se nello stesso concerto sono stati rappresentati più movimenti di uno stesso lavoro, il conteggio è comunque uno.
+
+```{r}
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(composerName) %>%
+  count(sort = TRUE)
+
+
+
+```
+
+
+
+
+```{r}
+#trovo i compositori che compaiono in solo 5 anni o meno per poi toglierli
+fiveorless <- programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(composerName) %>%
+  summarise(years = n_distinct(Year)) %>%
+  filter(years <= 5)
+
+yc <- programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  anti_join(fiveorless) %>%
+  group_by(composerName,Year) %>%
+  count() %>%
+  group_by(composerName) %>%
+  nest()
+
+yc_model <- function(df) {
+  gam(n ~ Year, data = df)
+}
+
+yc <- yc %>%
+  mutate(model = map(data, yc_model))
+
+yc <- yc %>%
+  mutate(augment = map(model, augment))
+
+models <- unnest(yc, augment)
+
+# 10 modelli che variano di più
+mostvar <- models %>%
+  group_by(composerName) %>%
+  summarise(
+    start = min(.fitted),
+    end = max(.fitted),
+    difference = end - start
+  ) %>%
+  arrange(-difference) %>%
+  head(10)
+
+# li plotto
+models %>%
+  semi_join(mostvar) %>%
+  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+# provo a plottare i valori reali con modello
+unnest(yc, c(data,augment), names_sep = "_") %>%
+semi_join(select(mostvar,composerName)) %>%
+select(composerName,data_Year,data_n,augment_.fitted) %>%
+ggplot(mapping = aes(x = data_Year, y = data_n, color = composerName)) +
+  geom_line(mapping = aes(x = data_Year, y = data_n, color = composerName), alpha = 1/2) +
+  geom_line(mapping = aes(x = data_Year, y = augment_.fitted), color = "blue") +
+  facet_wrap(vars(composerName))
+
+ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+
+
+models %>%
+  filter(.fitted > 20) %>%
+  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+minoridiuno <- yc %>%
+  mutate(tidied = map(model, tidy)) %>%
+  select(composerName,tidied) %>%
+  unnest(tidied) %>%
+  select(term, estimate) %>%
+  mutate(term = str_replace(term, "\\(Intercept\\)", "Intercept")) %>%
+  pivot_wider(names_from = term, values_from = estimate) %>%
+  ungroup() %>%
+  select(composerName, Intercept, Year) %>%
+  filter(Year < 1)
+
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  anti_join(minoridiuno, by = join_by(composerName)) %>%
+  group_by(Year,composerName) %>%
+  count() %>%
+ggplot(aes(Year, n, color = composerName)) +
+  geom_line(alpha = 1/2)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+concerts <-
+  programsT %>%
+  select(eventType,Location,Venue,Date,Year,Month,Day,Time)
+
+# ci sono 22407 concerti
+concerts <- 
+  concerts %>%
+  unique()
+```
+
+che tipo di concerti ci sono
+
+```{r}
+ggplot(data = concerts) +
+  geom_bar(mapping = aes(y = eventType))
+```
+
+```{r}
+concerts %>%
+  count(Location, sort = TRUE)
+```
+
+```{r}
+ggplot(concerts) +
+  geom_bar(mapping = aes(x = month(Date)))
+```
+
+
+```{r}
+concerts %>%
+  filter(Location == "Ann Arbor, MI") %>%
+  arrange(Date)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+programsT %>%
+  distinct(eventType,Location,Venue,Date,Year,Time,composerName) %>%
+  filter(!is.na(composerName)) %>%
+  group_by(Year,composerName) %>%
+  count(sort = TRUE)
+```
+
+```{r}
+programsT %>%
+  filter(str_detect(composerName, "Mendelssohn"), Year == 1950) %>%
+  arrange(Date) %>%
+  select(programID,season,eventType,Location,Venue,Date,Time,workID,composerName,workTitle) %>%
+  distinct(eventType,Location,Venue,Date,Time,workID,workTitle)
+```
+
+
+
+
+
+
+```{r}
+library
+ggplot(gapminder, aes(year, lifeExp)) +
+    geom_line(aes(group = country), alpha = 1/3) +
+    theme_classic()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+Orchestre.
+
+```{r}
+orchestras <- programsT %>%
+  distinct(orchestra,concertID, eventType, Location, Venue, Date, Year, Month, Day, Time)
+
+orchestras %>%
+  group_by(Year) %>%
+  ggplot() +
+  geom_bar(aes(y=orchestra))
+```
+
+Orchestre negli anni
+
+```{r}
+orchestras %>%
+  group_by(Year) %>%
+  count(orchestra) %>%
+  ggplot(aes(x=Year,y=n,color=orchestra)) +
+  geom_line(alpha = 1/3, show.legend = FALSE)
+```
+
+
+
+
+Venue negli anni.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_line(alpha = 1/3, show.legend = FALSE)
+```
+Venue per anno.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  mutate(
+    max = max(perc),
+    min = min(perc)
+  ) %>%
+  filter(perc == max) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_point(alpha = 1/3)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  filter(Year == 1901)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  filter(Year >= 1875 & Year <= 1925) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_line(alpha = 1/3, show.legend = FALSE)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Venue) %>%
+  ggplot(aes(x = Year, y = n, color = Venue)) +
+    geom_point(alpha = 1/3, show.legend = FALSE)
+```
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  group_by(Venue, .add = TRUE) %>%
+  count()
+```
+
+Locations per anno. La più presente.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Location) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  mutate(
+    max = max(perc),
+    min = min(perc)
+  ) %>%
+  filter(perc == max) %>%
+  ggplot(aes(x = Year, y = n, color = Location)) +
+    geom_point(alpha = 1/3)
+```
+
+Le seconde location per anno.
+
+```{r}
+concerts %>%
+  group_by(Year) %>%
+  count(Location) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  mutate (
+    first = max(perc),
+    second = nth(perc,2)
+  ) %>%
+  filter(perc == second) %>%
+  ggplot(aes(x = Year, y = n, color = Location)) +
+    geom_jitter(alpha = 1/3, show.legend = FALSE)
+```
+
+Quante Location per anno.
+
+```{r}
+concerts %>%
+  distinct(Year,Location) %>%
+  group_by(Year) %>%
+  count()
+```
+
+Date.
+
+```{r}
+concerts %>%
+  group_by(Month, Day) %>%
+  summarise(n = n()) %>%
+  arrange(-n)
+```
+
+
+
+
+

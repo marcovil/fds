@@ -375,7 +375,7 @@ programsT <- programsT %>%
   mutate(conductorName = if_else(str_detect(conductorName, ";\\s*;\\s*;"), "de Waart, Edo", conductorName))
 ```
 
-Modfico aggiungendo una colonna che indica la presenza di co-conduzione.
+Modifico aggiungendo una colonna che indica la presenza di co-conduzione.
 
 ```{r}
 programsT <- programsT %>%
@@ -384,162 +384,44 @@ programsT <- programsT %>%
   separate_longer_delim(conductorName, "; ")
 ```
 
+Costruisco un tibble ridotto per le analisi successive.
+
+```{r}
+ccseason <- programsT %>%
+  filter(is.na(interval)) %>%
+  distinct(eventType,concertID, Date, composerName, workTitle, conductorName, co_conductor) %>%
+  mutate(year = year(Date))
+```
+
+ANDAMENTO CONCERTI NELLE STAGIONI
+
 Creo un tibble con solo i concerti.
 
 ```{r}
-concerts <- programsT %>%
-  distinct(concertID, eventType, Location, Venue, Date, Year, Month, Day, Time)
-  
+concerts <- ccseason %>%
+  distinct(concertID, Date, year, eventType)
 ```
 
-Orchestre.
-
-```{r}
-orchestras <- programsT %>%
-  distinct(orchestra,concertID, eventType, Location, Venue, Date, Year, Month, Day, Time)
-
-orchestras %>%
-  group_by(Year) %>%
-  ggplot() +
-  geom_bar(aes(y=orchestra))
-```
-
-Orchestre negli anni
-
-```{r}
-orchestras %>%
-  group_by(Year) %>%
-  count(orchestra) %>%
-  ggplot(aes(x=Year,y=n,color=orchestra)) +
-  geom_line(alpha = 1/3, show.legend = FALSE)
-```
-
-
-
-
-Venue negli anni.
+Numero di concerti per anno nel tempo.
 
 ```{r}
 concerts %>%
-  group_by(Year) %>%
-  count(Venue) %>%
-  ggplot(aes(x = Year, y = n, color = Venue)) +
-    geom_line(alpha = 1/3, show.legend = FALSE)
-```
-Venue per anno.
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
-  count(Venue) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  mutate(
-    max = max(perc),
-    min = min(perc)
-  ) %>%
-  filter(perc == max) %>%
-  ggplot(aes(x = Year, y = n, color = Venue)) +
-    geom_point(alpha = 1/3)
-```
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
-  count(Venue) %>%
-  filter(Year == 1901)
-```
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
-  count(Venue) %>%
-  filter(Year >= 1875 & Year <= 1925) %>%
-  ggplot(aes(x = Year, y = n, color = Venue)) +
-    geom_line(alpha = 1/3, show.legend = FALSE)
-```
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
-  count(Venue) %>%
-  ggplot(aes(x = Year, y = n, color = Venue)) +
-    geom_point(alpha = 1/3, show.legend = FALSE)
-```
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
-  group_by(Venue, .add = TRUE) %>%
-  count()
-```
-
-Locations per anno. La più presente.
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
-  count(Location) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  mutate(
-    max = max(perc),
-    min = min(perc)
-  ) %>%
-  filter(perc == max) %>%
-  ggplot(aes(x = Year, y = n, color = Location)) +
-    geom_point(alpha = 1/3)
-```
-
-Le seconde location per anno.
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
-  count(Location) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  mutate (
-    first = max(perc),
-    second = nth(perc,2)
-  ) %>%
-  filter(perc == second) %>%
-  ggplot(aes(x = Year, y = n, color = Location)) +
-    geom_jitter(alpha = 1/3, show.legend = FALSE)
-```
-
-Quante Location per anno.
-
-```{r}
-concerts %>%
-  distinct(Year,Location) %>%
-  group_by(Year) %>%
-  count()
-```
-
-Date.
-
-```{r}
-concerts %>%
-  group_by(Month, Day) %>%
-  summarise(n = n()) %>%
-  arrange(-n)
-```
-
-
-
-
-
-
-Quanti concerti a stagione, andamento.
-
-```{r}
-concerts %>%
-  group_by(Year) %>%
+  group_by(year) %>%
   count() %>%
-  ggplot(mapping = aes(x = Year, y = n)) + 
+  ggplot(mapping = aes(x = year, y = n)) + 
   geom_point() +
   geom_smooth()
+```
+
+Dal 2015 in poi.
+
+```{r}
+concerts %>%
+  group_by(year) %>%
+  count() %>%
+  ggplot(mapping = aes(x = year, y = n)) + 
+  geom_line() +
+  coord_cartesian(xlim = c(2015, 2023))
 ```
 
 Che tipi di concerti ci sono.
@@ -553,14 +435,15 @@ concerts %>%
   geom_bar(stat = "identity")
 ```
 
-Andamento limitandosi alla stagione regolare.
+Ci sono differenze fra Subscription Season e il resto? Mi limito al periodo fino al 2019.
 
 ```{r}
 concerts %>%
-  filter(eventType == "Subscription Season") %>%
-  group_by(Year) %>%
+  filter(year <= 2019) %>%
+  mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
+  group_by(year,group) %>%
   count() %>%
-  ggplot(mapping = aes(x = Year, y = n)) + 
+  ggplot(aes(x = year, y = n, colour = group)) +
   geom_point() +
   geom_smooth()
 ```
@@ -569,10 +452,11 @@ Andamento negli anni delle altre tipologie di concerti.
 
 ```{r}
 concerts %>%
+  filter(year <= 2019) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(Year) %>%
+  group_by(year) %>%
   count() %>%
-  ggplot(mapping = aes(x = Year, y = n)) + 
+  ggplot(mapping = aes(x = year, y = n)) + 
   geom_point() +
   geom_smooth()
 ```
@@ -581,238 +465,137 @@ Mi concentro sul periodo che va dal 1975 ad oggi.
 
 ```{r}
 concerts %>%
-  filter(Year >= 1975 & Year < 2020) %>%
+  filter(year >= 1975 & year < 2020) %>%
   mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
-  group_by(Year,group) %>%
+  group_by(year,group) %>%
   count() %>%
-  ggplot(aes(x = Year, y = n, colour = group)) +
+  ggplot(aes(x = year, y = n, colour = group)) +
   geom_point() +
   geom_smooth()
 ```
 
-```{r}
-concerts %>%
-  filter(Year >= 1975 & Year < 2020) %>%
-  mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
-  group_by(Year,group) %>%
-  count()
-```
-
-Quali sono gli eventType forti dal 1990 in poi?
+Quali sono gli eventType preponderanti dal 1990 in poi?
 
 ```{r}
 concerts %>%
-  filter(Year >= 1990 & Year < 2020) %>%
+  filter(year >= 1990 & year < 2020) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(Year,eventType) %>%
+  group_by(year,eventType) %>%
   count() %>%
-  ggplot(aes(x = Year, y = n, color = eventType)) +
+  ggplot(aes(x = year, y = n, color = eventType)) +
   geom_line(alpha = 1/2, show.legend = FALSE)
 ```
+Fra gli eventi che non fanno parte della stagione regolare, quelli più presenti con maggior continuità sono i tour e i concerti da camera.
+
 ```{r}
 concerts %>%
-  filter(Year >= 1990  & Year < 2020) %>%
+  filter(year >= 1990 & year < 2020) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(Year,eventType) %>%
+  group_by(year,eventType) %>%
   count() %>%
-  filter(n > 10) %>%
-  ggplot(aes(x = Year, y = n, color = eventType)) +
-  geom_line(alpha = 1/2)
+  group_by(year) %>%
+  mutate(yearEvents = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / yearEvents) %>%
+  group_by(year) %>%
+  mutate(order = row_number(-perc)) %>%
+  filter(order <= 2) %>%
+  ungroup() %>%
+  ggplot() +
+  geom_line(aes(year, n, color = eventType))
 ```
 
-1990-2020
+Come si è evoluto negli anni il numero di rappresentazioni per compositore.
 
 ```{r}
-concerts %>%
-  filter(Year >= 1990 & Year < 2020) %>%
-  filter(eventType != "Subscription Season") %>%
-  group_by(Year,eventType) %>%
-  count() %>%
-  filter(n>5) %>%
-  ggplot(aes(x = Year, y = n, color = eventType)) +
-  geom_line() +
-  facet_wrap(~eventType)
-```
-
-```{r}
-concerts %>%
-  filter(eventType == "Tour") %>%
-  group_by(Year) %>%
-  count() %>%
-  ggplot(aes(x = Year, y = n)) +
-  geom_line() +
-  geom_smooth()
-```
-
-```{r}
-concerts %>%
-  filter(eventType == "Subscription Season") %>%
-  group_by(Year) %>%
-  count() %>%
-  ggplot(aes(x = Year, y = n)) +
-  geom_line()
-```
-
-```{r}
-concerts %>%
-  filter(eventType == "Subscription Season") %>%
-  filter(Year >= 1910 & Year <= 1930) %>%
-  group_by(Year) %>%
-  count() %>%
-  ggplot(aes(x = Year, y = n)) +
-  geom_line()
-```
-
-
-Quanti compositori sono stati rappresentati.
-
-```{r}
-programsT %>%
+ccseason %>%
+  mutate(year = year(Date)) %>%
   filter(!is.na(composerName)) %>%
-  distinct(composerName) %>%
-  count()
+  group_by(year,composerName) %>%
+  count() %>%
+  ggplot() +
+  geom_line(alpha = 1/2, aes(year, n, color = composerName), show.legend = FALSE) +
+  geom_line(aes(year,n), rap_anno)
 ```
 
-Quali sono stati i compositori più rappresentati? Conto quante rappresentazioni sono state fatte per ciascun compositore.
-Considero i lavori, quindi i workID, se nello stesso concerto sono stati rappresentati più movimenti di uno stesso lavoro, il conteggio è comunque uno.
+Costruisco un modello lineare anno-rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 10 anni.
 
 ```{r}
-programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+tenorless <- ccseason %>%
   filter(!is.na(composerName)) %>%
+  mutate(year = year(Date)) %>%
   group_by(composerName) %>%
-  count(sort = TRUE)
+  summarise(years = n_distinct(year)) %>%
+  filter(years <= 10)
 
-```
-
-Come si sono evolute le rappresentazioni per compositore negli anni.
-
-```{r}
-programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+yc <- ccseason %>%
   filter(!is.na(composerName)) %>%
-  group_by(Year,composerName) %>%
-  count() %>%
-ggplot(aes(Year, n, color = composerName)) +
-  geom_line(alpha = 1/2, show.legend = FALSE)
-```
-
-Quali compositori sono stati rappresentati più a lungo?
-
-```{r}
-programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  group_by(composerName) %>%
-  summarise(
-    first = min(Date),
-    last = max(Date),
-    timeSpan = (last - first) + 1
-  ) %>%
-  arrange(-timeSpan)
-```
-
-Densità di rappresentazioni.
-
-```{r}
-#da fare
-```
-
-Costruisco un modello lineare anno-rappresentazioni per tutti i compositori.
-
-```{r}
-#trovo i compositori che compaiono in solo 5 anni o meno per poi toglierli
-fiveorless <- programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  group_by(composerName) %>%
-  summarise(years = n_distinct(Year)) %>%
-  filter(years <= 5)
-
-yc <- programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  anti_join(fiveorless) %>%
-  group_by(composerName,Year) %>%
+  mutate(year = year(Date)) %>%
+  anti_join(tenorless) %>%
+  group_by(composerName,year) %>%
   count() %>%
   group_by(composerName) %>%
   nest()
 
 yc_model <- function(df) {
-  lm(n ~ Year, data = df)
+  lm(n ~ year, data = df)
 }
 
 yc <- yc %>%
   mutate(model = map(data, yc_model))
 
-yc <- yc %>%
-  mutate(augment = map(model, augment))
+yc <- yc %>% 
+  mutate(data = map2(data, model, add_residuals))
 
-models <- unnest(yc, augment)
+models <- yc %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model))
 
-# 10 modelli che variano di più
-mostvar <- models %>%
-  group_by(composerName) %>%
-  summarise(
-    start = min(.fitted),
-    end = max(.fitted),
-    difference = end - start
-  ) %>%
-  arrange(-difference) %>%
+slopes <- models %>%
+  filter(term == "year")
+
+slopes %>%
+  ggplot() +
+  geom_histogram(aes(x=estimate))
+
+upslopes <- slopes %>%
+  arrange(-estimate) %>%
   head(15)
 
-# li plotto
-models %>%
-  semi_join(mostvar) %>%
-  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
-  geom_line(alpha = 1/2)
-
-# provo a plottare i valori reali con modello
-unnest(yc, c(data,augment), names_sep = "_") %>%
-semi_join(select(mostvar,composerName)) %>%
-select(composerName,data_Year,data_n,augment_.fitted) %>%
-ggplot(mapping = aes(x = data_Year, y = data_n, color = composerName)) +
-  geom_line(mapping = aes(x = data_Year, y = data_n, color = composerName), alpha = 1/2) +
-  geom_line(mapping = aes(x = data_Year, y = augment_.fitted), color = "blue") +
-  facet_wrap(vars(composerName))
-
-ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
-  geom_line(alpha = 1/2, show.legend = FALSE)
-
+downslopes <- slopes %>%
+  arrange(estimate) %>%
+  head(15)
 
 models %>%
-  filter(.fitted > 20) %>%
-  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
-  geom_line(alpha = 1/2)
+  unnest(data) %>%
+  semi_join(upslopes) %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_smooth() +
+  facet_wrap(~composerName)
 
-minoridiuno <- yc %>%
-  mutate(tidied = map(model, tidy)) %>%
-  select(composerName,tidied) %>%
-  unnest(tidied) %>%
-  select(term, estimate) %>%
-  mutate(term = str_replace(term, "\\(Intercept\\)", "Intercept")) %>%
-  pivot_wider(names_from = term, values_from = estimate) %>%
-  ungroup() %>%
-  select(composerName, Intercept, Year) %>%
-  filter(Year < 1)
+models %>%
+  unnest(data) %>%
+  semi_join(downslopes) %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_smooth() +
+  facet_wrap(~composerName)
 
-programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  anti_join(minoridiuno, by = join_by(composerName)) %>%
-  group_by(Year,composerName) %>%
+ccseason %>%
+  filter(composerName == "Wagner,  Richard") %>%
+  mutate(year = year(Date)) %>%
+  group_by(year) %>%
   count() %>%
-ggplot(aes(Year, n, color = composerName)) +
-  geom_line(alpha = 1/2)
-
+  ungroup() %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_smooth()
 ```
 
 Vedo come sono i residui.
 
 ```{r}
-yc <- yc %>% 
-  mutate(data = map2(data, model, add_residuals))
-
 resids <- unnest(yc, data)
 
 resids %>%
@@ -826,393 +609,437 @@ glance = unnest(yc, glance)
 glance %>%
   arrange(r.squared)
   
-bad_fit <- filter(glance, r.squared < 0.001)
+worst_fit <- glance %>%
+  arrange(r.squared) %>%
+  head(20)
 
-programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  group_by(composerName,Year) %>%
-  count() %>%
-  semi_join(bad_fit, by = "composerName") %>%
-  ggplot(aes(Year, n, colour = composerName)) +
-    geom_line() +
+best_fit <- glance %>%
+  arrange(-r.squared) %>%
+  head(20)
+
+models %>%
+  unnest(data) %>%
+  semi_join(worst_fit, by="composerName") %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_smooth() +
   facet_wrap(~composerName)
 
-  count() %>%
-  filter(n>50) %>%
-  ungroup() %>%
-  ggplot(aes(Year, resid)) +
-    geom_line(aes(group = composerName), alpha = 1 / 3) + 
-    geom_smooth(se = FALSE) +
-    facet_wrap(~composerName) +
-    theme_classic()
-
+models %>%
+  unnest(data) %>%
+  semi_join(best_fit, by="composerName") %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_smooth() +
+  facet_wrap(~composerName)
 ```
 
 ```{r}
-#trovo i compositori che compaiono in solo 5 anni o meno per poi toglierli
-fiveorless <- programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  group_by(composerName) %>%
-  summarise(years = n_distinct(Year)) %>%
-  filter(years <= 5)
+top_resids <- resids %>%
+  arrange(-resid) %>%
+  head(20)
 
-yc <- programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
+bot_resids <- resids %>%
+  arrange(resid) %>%
+  head(50)
+
+models %>%
+  unnest(data) %>%
+  semi_join(top_resids, by="composerName") %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_smooth() +
+  facet_wrap(~composerName)
+
+models %>%
+  unnest(data) %>%
+  semi_join(bot_resids, by="composerName") %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_smooth() +
+  facet_wrap(~composerName)
+
+```
+
+Stessa cosa ma lavorando con le percentuali.
+
+```{r}
+ccseason %>%
+  mutate(year = year(Date)) %>%
   filter(!is.na(composerName)) %>%
-  anti_join(fiveorless) %>%
-  group_by(composerName,Year) %>%
+  group_by(year,composerName) %>%
   count() %>%
+  group_by(year) %>%
+  mutate(totalYear = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / totalYear) %>%
+ggplot(aes(year, perc, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+```
+
+Costruisco un modello lineare anno-rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 10 anni.
+
+```{r}
+ycp <- ccseason %>%
+  mutate(year = year(Date)) %>%
+  filter(!is.na(composerName)) %>%
+  anti_join(tenorless) %>%
+  group_by(year,composerName) %>%
+  count() %>%
+  group_by(year) %>%
+  mutate(totalYear = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / totalYear) %>%
   group_by(composerName) %>%
   nest()
 
-yc_model <- function(df) {
-  gam(n ~ Year, data = df)
+ycp_model <- function(df) {
+  lm(perc ~ year, data = df)
 }
 
-yc <- yc %>%
+ycp <- ycp %>%
   mutate(model = map(data, yc_model))
 
-yc <- yc %>%
-  mutate(augment = map(model, augment))
+ycp <- ycp %>% 
+  mutate(data = map2(data, model, add_residuals))
 
-models <- unnest(yc, augment)
+modelsp <- ycp %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model))
 
-# 10 modelli che variano di più
-mostvar <- models %>%
-  group_by(composerName) %>%
-  summarise(
-    start = min(.fitted),
-    end = max(.fitted),
-    difference = end - start
-  ) %>%
-  arrange(-difference) %>%
+slopesp <- modelsp %>%
+  filter(term == "year")
+
+slopesp %>%
+  ggplot() +
+  geom_histogram(aes(x=estimate))
+
+upslopesp <- slopesp %>%
+  arrange(-estimate) %>%
+  head(15)
+
+downslopesp <- slopesp %>%
+  arrange(estimate) %>%
+  head(15)
+
+modelsp %>%
+  unnest(data) %>%
+  semi_join(upslopesp) %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  facet_wrap(~composerName)
+
+modelsp %>%
+  unnest(data) %>%
+  semi_join(downslopesp) %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  facet_wrap(~composerName)
+
+modelsp %>%
+  unnest(data) %>%
+  filter(composerName == "Mozart,  Wolfgang  Amadeus") %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  geom_smooth()
+
+modelsp %>%
+  unnest(data) %>%
+  filter(composerName == "Beethoven,  Ludwig  van") %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  geom_smooth()
+
+ccseason %>%
+  filter(composerName == "Beethoven,  Ludwig  van") %>%
+  mutate(year = year(Date)) %>%
+  group_by(year) %>%
+  count() %>%
+  ungroup() %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  geom_smooth()
+
+```
+
+Vedo come sono i residui.
+
+```{r}
+residsp <- unnest(ycp, data)
+
+residsp %>%
+  group_by(composerName)
+  
+ycp <- ycp %>% 
+  mutate(glance = map(model, broom::glance))
+  
+glancep = unnest(ycp, glance)
+
+glancep %>%
+  arrange(r.squared)
+  
+worst_fitp <- glance %>%
+  arrange(r.squared) %>%
+  head(20)
+
+best_fitp <- glance %>%
+  arrange(-r.squared) %>%
+  head(20)
+
+modelsp %>%
+  unnest(data) %>%
+  semi_join(worst_fitp, by="composerName") %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  facet_wrap(~composerName)
+
+modelsp %>%
+  unnest(data) %>%
+  semi_join(best_fitp, by="composerName") %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  facet_wrap(~composerName)
+```
+
+Residui.
+
+```{r}
+top_residsp <- residsp %>%
+  arrange(-resid) %>%
+  head(20)
+
+bot_residsp <- residsp %>%
+  arrange(resid) %>%
+  head(20)
+
+modelsp %>%
+  unnest(data) %>%
+  semi_join(top_residsp, by="composerName") %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  geom_smooth() +
+  facet_wrap(~composerName)
+
+modelsp %>%
+  unnest(data) %>%
+  semi_join(bot_residsp, by="composerName") %>%
+  ggplot(aes(x = year, y = perc)) +
+  geom_line() +
+  geom_smooth() +
+  facet_wrap(~composerName)
+
+```
+
+Come sono composti i repertori dei conduttori? Considero i lavori e non i movimenti.
+
+```{r}
+ccseason %>%
+  group_by(conductorName,composerName) %>%
+  count() %>%
+  group_by(conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  ggplot() +
+  geom_histogram(aes(x = perc), binwidth = 0.01, boundary = 0)
+
+ccseason %>%
+  group_by(conductorName,composerName) %>%
+  count() %>%
+  group_by(conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  ungroup() %>%
+  count(cut_width(perc, 0.01, boundary = 0))
+
+ccseason %>%
+  group_by(conductorName,composerName) %>%
+  count() %>%
+  group_by(conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  ungroup() %>%
+  pull(perc) %>%
+  quantile(na.rm = TRUE)
+
+
+```
+
+Chi si è concentrato soprattutto su un solo autore? Escludendo chi ha condotto solo opere di un autore.
+
+```{r}
+ccseason %>%
+  group_by(conductorName,composerName) %>%
+  count() %>%
+  group_by(conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  filter(perc > 0.5 & perc < 1) %>%
+  arrange(-perc)
+```
+
+```{r}
+ccseason %>%
+  group_by(conductorName,composerName) %>%
+  count() %>%
+  group_by(conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  filter(perc == 1) %>%
+  arrange(-total)
+```
+
+Come sono evoluti i repertori dei direttori nel corso degli anni?
+
+```{r}
+perctime <- ccseason %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  mutate(year = year(Date)) %>%
+  group_by(year) %>%
+  count(conductorName,composerName) %>%
+  group_by(year,conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  group_by(conductorName,composerName) %>%
+  mutate(compYears = n_distinct(year)) %>%
+  ungroup() %>%
+  filter(compYears >=5)
+
+nested_pt <- perctime %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+
+modelf <- function(df) {
+  lm(perc ~ year, data = df)
+}
+
+nested_pt_models <- 
+  nested_pt %>%
+  mutate(model = map(data, modelf))
+
+top <- nested_pt_models %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "year") %>%
+  filter(p.value < 0.05) %>%
+  arrange(-estimate) %>%
   head(10)
 
-# li plotto
-models %>%
-  semi_join(mostvar) %>%
-  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
-  geom_line(alpha = 1/2)
-
-# provo a plottare i valori reali con modello
-unnest(yc, c(data,augment), names_sep = "_") %>%
-semi_join(select(mostvar,composerName)) %>%
-select(composerName,data_Year,data_n,augment_.fitted) %>%
-ggplot(mapping = aes(x = data_Year, y = data_n, color = composerName)) +
-  geom_line(mapping = aes(x = data_Year, y = data_n, color = composerName), alpha = 1/2) +
-  geom_line(mapping = aes(x = data_Year, y = augment_.fitted), color = "blue") +
-  facet_wrap(vars(composerName))
-
-ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
-  geom_line(alpha = 1/2, show.legend = FALSE)
+bot <- nested_pt_models %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "year") %>%
+  filter(p.value < 0.05) %>%
+  arrange(estimate) %>%
+  head(10)
 
 
-models %>%
-  filter(.fitted > 20) %>%
-  ggplot(mapping = aes(x = Year, y = .fitted, color = composerName)) +
-  geom_line(alpha = 1/2)
+perctime %>%
+  inner_join(top, join_by("composerName","conductorName")) %>%
+  ggplot(aes(year, perc, color = composerName)) +
+  geom_line() +
+  facet_wrap(~conductorName)
 
-minoridiuno <- yc %>%
-  mutate(tidied = map(model, tidy)) %>%
-  select(composerName,tidied) %>%
-  unnest(tidied) %>%
-  select(term, estimate) %>%
-  mutate(term = str_replace(term, "\\(Intercept\\)", "Intercept")) %>%
-  pivot_wider(names_from = term, values_from = estimate) %>%
+perctime %>%
+  inner_join(bot, join_by("composerName","conductorName")) %>%
+  ggplot(aes(year, perc, color = composerName)) +
+  geom_line() +
+  facet_wrap(~conductorName)
+```
+
+```{r}
+perctime %>%
+  filter(conductorName == "Boulez, Pierre") %>%
+  ggplot() +
+  geom_line(aes(x = year, y = perc, color = composerName))
+```
+
+```{r}
+perctime %>%
+  filter(conductorName == "Boulez, Pierre") %>%
+  ggplot() +
+  geom_line(aes(x = year, y = n, color = composerName))
+```
+
+
+
+```{r}
+perctime %>%
+  filter(conductorName == "Masur, Kurt") %>%
+  ggplot() +
+  geom_line(aes(x = year, y = perc, color = composerName))
+```
+
+```{r}
+perctime %>%
+  filter(conductorName == "Masur, Kurt") %>%
+  ggplot() +
+  geom_line(aes(x = year, y = n, color = composerName))
+```
+
+
+```{r}
+perctime %>%
+  filter(conductorName == "Masur, Kurt") %>%
+  ggplot() +
+  geom_point(aes(x = year, y = n))
+```
+
+
+```{r}
+perctime_2 <- ccseason %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  mutate(year = year(Date)) %>%
+  group_by(year) %>%
+  count(conductorName,composerName) %>%
+  group_by(year,conductorName) %>%
+  mutate(total = sum(n)) %>%
+  mutate(perc = n / total) %>%
+  group_by(conductorName,composerName) %>%
+  mutate(compYears = n_distinct(year)) %>%
+  mutate(year_2 = year**2) %>%
   ungroup() %>%
-  select(composerName, Intercept, Year) %>%
-  filter(Year < 1)
+  filter(compYears >=5)
 
-programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,workID,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  anti_join(minoridiuno, by = join_by(composerName)) %>%
-  group_by(Year,composerName) %>%
-  count() %>%
-ggplot(aes(Year, n, color = composerName)) +
-  geom_line(alpha = 1/2)
+nested_pt_2 <- perctime_2 %>%
+  group_by(conductorName,composerName) %>%
+  nest()
 
-```
-
-
-
-
-
-
-
-
-
-
-
-
-```{r}
-concerts <-
-  programsT %>%
-  select(eventType,Location,Venue,Date,Year,Month,Day,Time)
-
-# ci sono 22407 concerti
-concerts <- 
-  concerts %>%
-  unique()
-```
-
-che tipo di concerti ci sono
-
-```{r}
-ggplot(data = concerts) +
-  geom_bar(mapping = aes(y = eventType))
-```
-
-```{r}
-concerts %>%
-  count(Location, sort = TRUE)
-```
-
-```{r}
-ggplot(concerts) +
-  geom_bar(mapping = aes(x = month(Date)))
-```
-
-
-```{r}
-concerts %>%
-  filter(Location == "Ann Arbor, MI") %>%
-  arrange(Date)
-```
-
-
-
-
-
-
-
-
-
-```{r}
-programsT %>%
-  distinct(eventType,Location,Venue,Date,Year,Time,composerName) %>%
-  filter(!is.na(composerName)) %>%
-  group_by(Year,composerName) %>%
-  count(sort = TRUE)
-```
-
-```{r}
-programsT %>%
-  filter(str_detect(composerName, "Mendelssohn"), Year == 1950) %>%
-  arrange(Date) %>%
-  select(programID,season,eventType,Location,Venue,Date,Time,workID,composerName,workTitle) %>%
-  distinct(eventType,Location,Venue,Date,Time,workID,workTitle)
-```
-
-
-
-
-
-
-```{r}
-library
-ggplot(gapminder, aes(year, lifeExp)) +
-    geom_line(aes(group = country), alpha = 1/3) +
-    theme_classic()
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Cerco di capire che cosa contengono.
-
-```{r}
-works <- programsT %>%
-  mutate(works_L = sapply(works, length)) %>%
-  filter(works_L == 3) %>%
-  mutate(works_N = lapply(works, names)) %>%
-  pull(works_N)
-
-first <- works[[1]]
-
-identical_to_first <- lapply(works, identical, first)
-
-works4 <- programsT %>%
-  mutate(works_L = sapply(works, length)) %>%
-  filter(works_L == 4) %>%
-  mutate(works_N = lapply(works, names)) %>%
-  pull(works_N)
-
-works4_first <- works4[[1]]
-id_to_first_w4 <- lapply(works4, identical, works4_first)
-every(id_to_first_w4, isTRUE)
-
-works5 <- programsT %>%
-  mutate(works_L = sapply(works, length)) %>%
-  filter(works_L == 5) %>%
-  mutate(works_N = lapply(works, names)) %>%
-  pull(works_N)
-
-works5_first <- works5[[1]]
-id_to_first_w5 <- lapply(works5, identical, works5_first)
-every(id_to_first_w5, isTRUE)
-detect_index(id_to_first_w5, isFALSE)
-works5[[18]]
-length(id_to_first_w5)
-sum(unlist(id_to_first_w5))
-
-works6 <- programsT %>%
-  mutate(works_L = sapply(works, length)) %>%
-  filter(works_L == 6) %>%
-  mutate(works_N = lapply(works, names)) %>%
-  pull(works_N)
-
-works6_first <- works6[[1]]
-id_to_first_w6 <- lapply(works6, identical, works6_first)
-every(id_to_first_w6, isTRUE)
-
-```
-
-Faccio unnest_wider di works, controllo di aver mantenuto le informazioni di partenza.
-
-```{r}
-programsT <- programsT %>% mutate(works_L = sapply(works, length))
-prova <- programsT %>% unnest_wider(works)
-prova %>% filter(works_L == 3) # deve essere 18489
-prova %>% filter(works_L == 4)
-prova %>% filter(works_L == 5)
-prova %>% filter(works_L == 6)
-prova %>% filter(!is.na(conductorName))
-prova
-```
-
-Controllo la lunghezza delle liste contenute in soloists.
-
-```{r}
-# da fare meglio
-```
-
-Faccio unnest_longer() su solisti e quindi unnest_wider().
-
-```{r}
-prova <- unnest_longer(prova, soloists, keep_empty = TRUE) # spiegare perché
-prova <- unnest_wider(prova, soloists) # aumento da 17 a 19 le colonne ? e mi sono anche sistemato il problema del NULL
-```
-
-Verifico la lunghezza degli elementi contenuti in movement. Ci sono 148 elementi che hanno lunghezza 2.
-
-```{r}
-prova %>%
-  mutate(movement_L = sapply(movement, length)) %>%
-  count(movement_L)
-```
-
-Guardo a quelli che hanno lunghezza 2.
-
-```{r}
-prova %>%
-  mutate(movement_L = sapply(movement, length)) %>%
-  filter(movement_L == 2)
-```
-
-
-
-
-
-Applico funzione per sistemarli
-
-```{r}
-mod_w <- function(x) {
-  if (is.null(x)) return (NA)
-  if (length(x) == 1) return (x[[1]])
-  if (length(x) == 2) return (combine_w(x[[1]], x[[2]]))
+modelf2 <- function(df) {
+  lm(perc ~ year + year_2, data = df)
 }
 
-combine_w <- function(x,y) {
-  if (startsWith(x,",")) {
-    return (paste(y,x))
-  } else {
-    return (paste(x,y))
-  }
-}
+nested_pt_models_2 <- 
+  nested_pt_2 %>%
+  mutate(model = map(data, modelf2))
 
-prova <- prova %>% mutate(workTitle = sapply(workTitle, mod_w))
+top <- nested_pt_models_2 %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "year_2") %>%
+  filter(p.value < 0.05) %>%
+  arrange(-estimate) %>%
+  head(10)
 
-prova %>%
-  filter(str_detect(workTitle, "PROCESSION"))
+bot <- nested_pt_models_2 %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "year_2") %>%
+  filter(p.value < 0.05) %>%
+  arrange(estimate) %>%
+  head(10)
+
 ```
-
-Correggo come è scritta la data.
 
 ```{r}
-prova %>% separate(Date, into = c("date", "time"), sep = "T") %>%
-  count(time)
-
-# elimino time perché non è attendibile
-prova %>%
-  separate(Date, into = c("date", "time"), sep = "T") %>%
-  unite(new, date, Time, sep = " ") %>%
-  select(-time) %>%
-  mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
-  select(-new) %>%
-  select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
-# attenzione al warning
+perctime %>%
+  inner_join(top, join_by("composerName","conductorName")) %>%
+  ggplot(aes(year, perc, color = composerName)) +
+  geom_line() +
+  facet_wrap(~conductorName)
 ```
 
-Posso rimuovere la colonna id?
-
-```{r}
-p1 <- prova %>% select(programID, id)
-p1d <- distinct(p1)
-length(unique(p1$programID)) # 14502 programID unici
-length(unique(p1$id)) # 14507 id unici
-
-# voglio trovare valori di programID che sono associati a più di un id
-p1 %>% group_by(programID) %>% count(id) %>% count(programID, sort = TRUE) # qui ne vedo tre
-
-p1 %>% group_by(id) %>% count(programID) %>% count(id, sort = TRUE)
 
 
 
@@ -1224,35 +1051,69 @@ p1 %>% group_by(id) %>% count(programID) %>% count(id, sort = TRUE)
 
 
 
-p2 <- p1
-anti_join(p1, p2, by=c("programID", "id"))
-anti_join(p1, p2, by=c("id", "programID"))
-prova %>% group_by("id") %>% group_by("programID") %>% count()
-inner_join(p1,p2,"id")
-distinctALL <- distinct(p1, programID, id)
-distinctID <- prova %>% distinct(id)
-distinctPID <- prova %>% distinct(programID)
-anti_join(distinctALL,distinctPID)
-str(prova)
 
-all(!is.na(prova$id))
-all(!is.na(prova$programID))
-p2 <- rename(p2,programID2 = programID, id2 = id)
-check <- tibble(p1,p2)
 
-checkf <- function(a,b,c,d) {
-  if (a == b) {
-    if (b == d) {
-      return (TRUE)
-    } else {
-      return (FALSE)
-    }
-  }
-}
-str(check)
-sapply(check, checkf, a = programID, b = id, c = programID2, d = id2)
-pmap(check,checkf)
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Quanti programmi ci sono nel dataset?
 
@@ -1264,63 +1125,7 @@ prova %>% group_by(Location) %>% count(sort = TRUE)
 prova %>% filter(programID == 13158)
 ```
 
-vecchia cosa per date e time
 
-```{r}
-programsT %>% separate(Date, into = c("date", "time"), sep = "T") %>%
-  count(time)
-
-# elimino time perché non è attendibile
-prova %>%
-  separate(Date, into = c("date", "time"), sep = "T") %>%
-  unite(new, date, Time, sep = " ") %>%
-  select(-time) %>%
-  mutate(Date = parse_date_time(new, "%y-%m-%d %H:%M%p")) %>%
-  select(-new) %>%
-  select(id, programID, orchestra, season, eventType, Location, Venue, Date, everything())
-# attenzione al warning
-
-programsT %>%
-  mutate(date = sapply(Date,function (x) str_extract(x, "[[:digit:]-]+")))
-
-programsT %>%
-  mutate(dt = str_extract(programsT$Date, "[[:digit:]-]+")) %>%
-  mutate(dtt = str_c(dt, " ", programsT$Time)) %>%
-  mutate(dateTime = parse_date_time(dtt, "%y-%m-%d %I:%M%p"))
-
-programsT %>%
-  mutate(dt = str_extract(programsT$Date, "[[:digit:]-]+")) %>%
-  mutate(date = parse_date(dt)) 
-
-
-  mutate(dtt = str_c(dt, " ", programsT$Time)) %>%
-  mutate(dateTime = parse_date_time(dtt, "%y-%m-%d %I:%M%p"))
-
-
-str_extract(x, "[[:digit:]-]+")
-
-length(str_extract(programsT$Date, "\\d+-\\d+-\\d+"))
-str_extract("1842-12-07T05:00:00Z", "[[:digit:]-]+")
-as_datetime("1842-12-07 8:00PM")
-
-length(str_extract(programsT$Time, "\\d+:\\d+PM"))
-str_extract("8:00PM", "PM")
-is.na(programsT$Time)
-length(programsT$Date
-       
-       )
-
-sum(is.na(c(NA,NA,3)))
-
-
-programsT <- programsT %>%
-  mutate(Time = str_replace(Time, "None", "")) %>%
-  mutate(Date = str_c(str_extract(Date, "[[:digit:]-]+"),Time)) %>%
-  mutate(Date = parse_date_time(Date, c("%y-%m-%d %I:%M%p","%y-%m-%d"))) %>%
-  select(programID, orchestra, season, eventType, Location, Venue, Date, Time, ID, composerName, workTitle, conductorName, soloistName, soloistInstrument, soloistRoles, movement, interval)
-
-
-```
 
 La colonna "interval" contiene intermission di vari tipi.
 
@@ -1489,9 +1294,7 @@ programsT %>%
 Concentrandomi sulla subscription season.
 
 ```{r}
-ccseason <- programsT %>%
-  filter(is.na(interval)) %>%
-  distinct(eventType,concertID, Date, composerName, workTitle, conductorName, co_conductor)
+
   
 ccseason %>%
   filter(eventType == "Subscription Season") %>%
@@ -1631,112 +1434,5 @@ ggplot(aes(Year, n, color = composerName)) +
 ```
 
 
-Come sono composti i repertori dei conduttori? Considero i lavori e non i movimenti.
 
-```{r}
-ccseason %>%
-  group_by(conductorName,composerName) %>%
-  count() %>%
-  group_by(conductorName) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  ggplot() +
-  geom_histogram(aes(x = perc), binwidth = 0.01, boundary = 0)
-
-ccseason %>%
-  group_by(conductorName,composerName) %>%
-  count() %>%
-  group_by(conductorName) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  ungroup() %>%
-  count(cut_width(perc, 0.01, boundary = 0))
-
-ccseason %>%
-  group_by(conductorName,composerName) %>%
-  count() %>%
-  group_by(conductorName) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  ungroup() %>%
-  pull(perc) %>%
-  quantile(na.rm = TRUE)
-```
-
-Chi si è concentrato soprattutto su un solo autore? Escludendo chi ha condotto solo opere di un autore.
-
-```{r}
-ccseason %>%
-  group_by(conductorName,composerName) %>%
-  count() %>%
-  group_by(conductorName) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  filter(perc > 0.5 & perc < 1) %>%
-  arrange(-perc)
-```
-
-```{r}
-ccseason %>%
-  group_by(conductorName,composerName) %>%
-  count() %>%
-  group_by(conductorName) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  filter(perc == 1) %>%
-  arrange(-total)
-```
-
-
-```{r}
-perctime <- ccseason %>%
-  filter(!is.na(conductorName)) %>%
-  filter(conductorName != "Not conducted") %>%
-  mutate(year = year(Date)) %>%
-  group_by(year) %>%
-  count(conductorName,composerName) %>%
-  group_by(year,conductorName) %>%
-  mutate(total = sum(n)) %>%
-  mutate(perc = n / total) %>%
-  ungroup()
-
-nested_pt <- perctime %>%
-  group_by(conductorName,composerName) %>%
-  nest()
-nested_pt$data[[994]]
-modelf <- function(df) {
-  lm(perc ~ year, data = df)
-}
-
-modelf2 <- function(df) {
-  glm(count ~ year, data = df)
-}
-
-nested_pt_models <- 
-  nested_pt %>%
-  mutate(model = map(data, modelf))
-
-nested_pt_models <- 
-  nested_pt %>%
-  mutate(model = map(data, modelf2))
-
-
-extract_year <- function(df) {
-  summary(df)$coefficients
-}
-
-top <- nested_pt_models %>%
-  mutate(model = map(model,tidy)) %>%
-  unnest(cols = c(model)) %>%
-  filter(term == "year") %>%
-  filter(p.value < 0.05)
-
-perctime %>%
-  inner_join(top, by = c("conductorName","composerName")) %>%
-  ggplot(aes(year, perc, group = conductorName, color = composerName)) +
-  geom_line(show.legend = FALSE)
-
-
-  
-```
 
