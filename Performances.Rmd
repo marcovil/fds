@@ -750,7 +750,7 @@ modelsp %>%
   unnest(data) %>%
   semi_join(upslopesp) %>%
   ggplot(aes(x = seasonN, y = perc)) +
-  geom_line() +
+  geom_point(alpha = 1/3) +
   facet_wrap(~composerName)
 ```
 
@@ -764,7 +764,7 @@ modelsp %>%
   unnest(data) %>%
   semi_join(downslopesp) %>%
   ggplot(aes(x = seasonN, y = perc)) +
-  geom_line() +
+  geom_point(alpha = 1/3) +
   facet_wrap(~composerName)
 ```
 
@@ -901,6 +901,30 @@ ggplot(aes(seasonN, perc, color = composerName)) +
   geom_line(alpha = 1/2, show.legend = FALSE)
 ```
 
+```{r}
+ccseason %>%
+  group_by(seasonN,composerName) %>%
+  count() %>%
+  group_by(seasonN) %>%
+  mutate(totalSeason = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / totalSeason) %>%
+  ungroup() %>%
+  anti_join(top50sd, by = "composerName") %>%
+ggplot(aes(seasonN, perc, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE) +
+  coord_cartesian(xlim=c(50,75))
+```
+La 70ma stagione sembra essere un po' un punto di svolta.
+
+```{r}
+
+```
+
+
+
+
+
 Come sono composti i repertori dei conduttori? Considero i lavori e non i movimenti.
 
 ```{r}
@@ -959,29 +983,301 @@ ccseason %>%
   arrange(-total)
 ```
 
+numero di rappresentazioni per stagione
+
+```{r}
+ccseason %>%
+  group_by(seasonN) %>%
+  count() %>%
+  ggplot(aes(seasonN,n)) +
+  geom_point()
+
+#filtro quelle che stanno sopra le 200 rappresentazioni
+
+over200 <- ccseason %>%
+  group_by(seasonN) %>%
+  count() %>%
+  filter(n > 200) %>%
+  select(seasonN)
+
+```
+
+
+
 Come sono evoluti i repertori dei direttori nel corso degli anni?
+LAVORANDO SU NUMERO RAPPRESENTAZIONI
+
+```{r}
+ccseason %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  inner_join(over200) %>%
+  group_by(seasonN,conductorName,composerName) %>%
+  count() %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(condRep = sum(n)) %>%
+  ungroup() %>%
+  mutate(percComp = n / condRep) %>%
+  group_by(conductorName,composerName) %>%
+  mutate(compSeasons = n_distinct(seasonN)) %>%
+  ggplot(aes(seasonN,percComp,color=conductorName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+```
+
+```{r}
+ncp <- ccseason %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  inner_join(over200) %>%
+  group_by(seasonN,conductorName,composerName) %>%
+  count() %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(condRep = sum(n)) %>%
+  ungroup() %>%
+  mutate(percComp = n / condRep) %>%
+  group_by(conductorName,composerName) %>%
+  mutate(compSeasons = n_distinct(seasonN)) %>%
+  filter(compSeasons >= 5) %>%
+  ungroup()
+
+ncp_nested <- ncp %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+
+model_ncp <- function(df) {
+  lm(n ~ seasonN, data = df)
+}
+
+nested_ncp_models <- 
+  ncp_nested %>%
+  mutate(model = map(data, model_ncp))
+```
+
+Modelli crescenti.
+
+```{r}
+up_ncp <- nested_ncp_models %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  arrange(estimate > 0) %>%
+  arrange(-estimate) %>%
+  head(10)
+
+ncp %>%
+  inner_join(up_ncp) %>%
+  ggplot(aes(seasonN,n,color=composerName)) +
+  geom_line() +
+  geom_point(aes(seasonN,n))
+```
+
+Modelli decrescenti
+
+```{r}
+down_ncp <- nested_ncp_models %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  filter(estimate < 0) %>%
+  arrange(estimate) %>%
+  head(10)
+
+ncp %>%
+  inner_join(down_ncp) %>%
+  ggplot(aes(seasonN,n,color=composerName)) +
+  geom_line() +
+  geom_point(aes(seasonN,n))
+```
+
+```{r}
+nested_ncp_models %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  filter(estimate > -0.1) %>%
+  filter(estimate < 0.1) %>%
+  head(30) %>%
+  inner_join(ncp) %>%
+  ggplot(aes(seasonN,n,color=composerName)) +
+  geom_line() +
+  geom_point(aes(seasonN,n))
+```
+
+Lavoro sulle percentuali.
+
+```{r}
+ncp_nested_2 <- ncp %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+
+model_ncp_2 <- function(df) {
+  lm(percComp ~ seasonN, data = df)
+}
+
+nested_ncp_models_2 <- 
+  ncp_nested_2 %>%
+  mutate(model = map(data, model_ncp_2))
+```
+
+Modelli crescenti.
+
+```{r}
+up_ncp_2 <- nested_ncp_models_2 %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  arrange(estimate > 0) %>%
+  arrange(-estimate) %>%
+  head(10)
+
+ncp %>%
+  inner_join(up_ncp_2) %>%
+  ggplot(aes(seasonN,percComp,color=conductorName)) +
+  geom_line() +
+  geom_point(aes(seasonN,percComp))
+```
+
+Modelli decrescenti.
+
+```{r}
+down_ncp_2 <- nested_ncp_models_2 %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  filter(estimate < 0) %>%
+  arrange(estimate) %>%
+  head(10)
+
+ncp %>%
+  inner_join(down_ncp_2) %>%
+  ggplot(aes(seasonN,percComp,color=conductorName)) +
+  geom_line() +
+  geom_point(aes(seasonN,percComp))
+```
+
+Vedo distribuzione
+
+```{r}
+nested_ncp_models_2 %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  ggplot() +
+  geom_histogram(aes(estimate))
+```
+
+
+```{r}
+```
+
+
+
+
+
+```{r}
+
+nested_ncp_models_2 <- nested_ncp_models_2 %>% 
+  mutate(data = map2(data, model, add_residuals))
+
+nested_ncp_models_2 <- nested_ncp_models_2 %>% 
+  mutate(glance = map(model, broom::glance))
+```
+
+```{r}
+glance <- unnest(nested_ncp_models_2, glance)
+
+```
+
+Modelli che fittano bene
+
+```{r}
+overzerofive <- glance %>% 
+  arrange(-r.squared) %>%
+  filter(r.squared >= 0.5) %>%
+  select(conductorName,composerName)
+
+good <- glance %>% 
+  arrange(-r.squared) %>%
+  head(10) %>%
+  select(conductorName,composerName)
+```
+
+Modelli che fittano male.
+
+```{r}
+underzerofive <- glance %>% 
+  arrange(-r.squared) %>%
+  filter(r.squared <= 0.5) %>%
+  select(conductorName,composerName)
+
+bad <- glance %>% 
+  arrange(r.squared) %>%
+  head(10) %>%
+  select(conductorName,composerName)
+  
+```
+
+```{r}
+glance %>%
+  select(r.squared) %>%
+  ggplot(aes(r.squared)) +
+  geom_histogram()
+```
+
+
+
+
+```{r}
+ncp %>%
+  inner_join(bad) %>%
+  ggplot(aes(seasonN, percComp, color = conductorName)) +
+  geom_line()
+```
+
+
+
+
 
 ```{r}
 perctime <- ccseason %>%
   filter(!is.na(conductorName)) %>%
   filter(conductorName != "Not conducted") %>%
-  mutate(year = year(Date)) %>%
-  group_by(year) %>%
+  select(seasonN,conductorName,workTitle,concertID,composerName)
+  
+
+ccseason %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  group_by(seasonN,conductorName,composerName) %>%
+  count() %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(condRep = sum(n)) %>%
+  ungroup() %>%
+  
+    
+    
+
+
+
+
   count(conductorName,composerName) %>%
-  group_by(year,conductorName) %>%
+  group_by(seasonN,conductorName) %>%
   mutate(total = sum(n)) %>%
   mutate(perc = n / total) %>%
+  filter(perc < 1) %>%
   group_by(conductorName,composerName) %>%
-  mutate(compYears = n_distinct(year)) %>%
-  ungroup() %>%
-  filter(compYears >=5)
+  mutate(compSeasons = n_distinct(seasonN)) %>%
+  ungroup() 
+
+#  %>%
+#  filter(compSeasons >=5)
 
 nested_pt <- perctime %>%
   group_by(conductorName,composerName) %>%
   nest()
 
 modelf <- function(df) {
-  lm(perc ~ year, data = df)
+  lm(perc ~ seasonN, data = df)
 }
 
 nested_pt_models <- 
@@ -991,69 +1287,83 @@ nested_pt_models <-
 top <- nested_pt_models %>%
   mutate(model = map(model,tidy)) %>%
   unnest(cols = c(model)) %>%
-  filter(term == "year") %>%
-  filter(p.value < 0.05) %>%
+  filter(term == "seasonN") %>%
+  arrange(estimate > 0) %>%
   arrange(-estimate) %>%
-  head(10)
-
-bot <- nested_pt_models %>%
-  mutate(model = map(model,tidy)) %>%
-  unnest(cols = c(model)) %>%
-  filter(term == "year") %>%
-  filter(p.value < 0.05) %>%
-  arrange(estimate) %>%
-  head(10)
-
+  head(20)
 
 perctime %>%
   inner_join(top, join_by("composerName","conductorName")) %>%
-  ggplot(aes(year, perc, color = composerName)) +
+  ggplot(aes(seasonN, perc, color = composerName)) +
   geom_line() +
   facet_wrap(~conductorName)
+```
+
+```{r}
+bot <- nested_pt_models %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  filter(estimate < 0) %>%
+  arrange(estimate) %>%
+  head(20)
 
 perctime %>%
   inner_join(bot, join_by("composerName","conductorName")) %>%
-  ggplot(aes(year, perc, color = composerName)) +
-  geom_line() +
+  ggplot(aes(seasonN, perc, color = composerName)) +
+  geom_point() +
   facet_wrap(~conductorName)
 ```
 
 ```{r}
 perctime %>%
+  filter(conductorName == "Harding, Daniel") %>%
+  ggplot() +
+  geom_col(aes(x = seasonN, y = perc, fill = composerName))
+
+perctime %>%
+  filter(conductorName == "Muti, Riccardo")
+
+perctime %>%
+  inner_join(bot, join_by("composerName","conductorName")) %>%
+  filter(conductorName == "Mahler, Gustav") %>%
+  ggplot() +
+  geom_col(aes(x = seasonN, y = perc, fill = composerName))
+
+bot
+
+perctime %>%
+  inner_join(bot, join_by("composerName","conductorName")) %>%
+  group_by(conductorName,composerName) %>%
+  mutate(seasons = max(seasoN) - min(seasonN) + 1) %>%
+  arrange(-seasons) %>%
+  ungroup() %>%
+  ggplot(aes(seasonN, perc, color = composerName)) +
+  geom_point() +
+  facet_wrap(~conductorName)
+
+
+```
+
+```{r}
+perctime %>%
+  filter(conductorName == "Slatkin, Leonard") %>%
+  ggplot() +
+  geom_point(aes(x = seasonN, y = perc, color = composerName))
+```
+
+```{r}
+perctime %>%
+  filter(conductorName == "Masur, Kurt") %>%
+  ggplot() +
+  geom_point(aes(x = seasonN, y = perc, color = composerName))
+```
+
+```{r}
+perctime %>%
   filter(conductorName == "Boulez, Pierre") %>%
   ggplot() +
-  geom_line(aes(x = year, y = perc, color = composerName))
-```
-
-```{r}
-perctime %>%
-  filter(conductorName == "Boulez, Pierre") %>%
-  ggplot() +
-  geom_line(aes(x = year, y = n, color = composerName))
-```
-
-
-
-```{r}
-perctime %>%
-  filter(conductorName == "Masur, Kurt") %>%
-  ggplot() +
-  geom_line(aes(x = year, y = perc, color = composerName))
-```
-
-```{r}
-perctime %>%
-  filter(conductorName == "Masur, Kurt") %>%
-  ggplot() +
-  geom_line(aes(x = year, y = n, color = composerName))
-```
-
-
-```{r}
-perctime %>%
-  filter(conductorName == "Masur, Kurt") %>%
-  ggplot() +
-  geom_point(aes(x = year, y = n))
+  geom_point(aes(x = seasonN, y = perc, color = composerName))
 ```
 
 
