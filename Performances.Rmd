@@ -375,6 +375,13 @@ programsT <- programsT %>%
   mutate(conductorName = if_else(str_detect(conductorName, ";\\s*;\\s*;"), "de Waart, Edo", conductorName))
 ```
 
+Correggo errori nei nomi dei compositori.
+
+```{r}
+programsT <- programsT %>%
+  mutate(composerName = str_replace_all(composerName, "\\s+", " "))
+```
+
 Modifico aggiungendo una colonna che indica la presenza di co-conduzione.
 
 ```{r}
@@ -384,44 +391,43 @@ programsT <- programsT %>%
   separate_longer_delim(conductorName, "; ")
 ```
 
-Costruisco un tibble ridotto per le analisi successive.
+Costruisco tibble ridotti per le analisi successive.
 
 ```{r}
-ccseason <- programsT %>%
+performances <- programsT %>%
   filter(is.na(interval)) %>%
   distinct(orchestra,eventType,season,concertID, Date, composerName, workTitle, conductorName, co_conductor) %>%
   mutate(year = year(Date)) %>%
   mutate(seasonN = dense_rank(season))
+
+performances_works <- programsT %>%
+  filter(is.na(interval)) %>%
+  distinct(orchestra,eventType,season,concertID, Date, composerName, workTitle, workID, movID, conductorName, co_conductor) %>%
+  mutate(year = year(Date)) %>%
+  mutate(seasonN = dense_rank(season))
+
+performances_works_complete <- performances_works %>%
+  filter(is.na(movID))
 ```
 
 Orchestre presenti nel database.
 
 ```{r}
-ggplot(ccseason) +
+ggplot(performances) +
   geom_bar(aes(y = orchestra))
 ```
 
 Orchestre nel tempo.
 
 ```{r}
-ggplot(ccseason) +
+ggplot(performances) +
   geom_point(aes(seasonN, orchestra))
 ```
 
-ANDAMENTO CONCERTI NELLE STAGIONI
-
-Creo un tibble con solo i concerti. Mi concentro solo sull'attività della New York Philarmonic.
+Andamento performance nelle stagioni.
 
 ```{r}
-concerts <- ccseason %>%
-  filter(orchestra == "New York Philharmonic") %>%
-  distinct(concertID, Date, year, season, seasonN, eventType)
-```
-
-Numero di concerti per anno nel tempo.
-
-```{r}
-concerts %>%
+performances %>%
   group_by(seasonN) %>%
   count() %>%
   ggplot(mapping = aes(x = seasonN, y = n)) + 
@@ -429,33 +435,10 @@ concerts %>%
   geom_smooth()
 ```
 
-Limitandomi al periodo pre-covid.
+Che tipi di performance ci sono. Mi limito alle categorie che contengono più di 100 performance.
 
 ```{r}
-concerts %>%
-  filter(year <= 2020) %>%
-  group_by(seasonN) %>%
-  count() %>%
-  ggplot(mapping = aes(x = seasonN, y = n)) + 
-  geom_point() +
-  geom_smooth()
-```
-
-Dal 2015 in poi.
-
-```{r}
-concerts %>%
-  group_by(year) %>%
-  count() %>%
-  ggplot(mapping = aes(x = year, y = n)) + 
-  geom_line() +
-  coord_cartesian(xlim = c(2015, 2023))
-```
-
-Che tipi di concerti ci sono. Mi limito alle categorie che contengono più di 100 concerti.
-
-```{r}
-concerts %>%
+performances %>%
   group_by(eventType) %>%
   count() %>%
   filter(n > 100) %>%
@@ -463,11 +446,19 @@ concerts %>%
   geom_bar(stat = "identity")
 ```
 
-Ci sono differenze fra Subscription Season e il resto? Mi limito al periodo fino al 2019.
+```{r}
+performances %>%
+  group_by(eventType) %>%
+  filter(orchestra == "New York Philharmonic") %>%
+  count() %>%
+  filter(n > 100) %>%
+  ggplot(aes(x = n, y = eventType)) +
+  geom_bar(stat = "identity")
+```
 
 ```{r}
-concerts %>%
-  filter(year <= 2019) %>%
+performances %>%
+  filter(orchestra == "New York Philharmonic") %>%
   mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
   group_by(year,group) %>%
   count() %>%
@@ -476,90 +467,1551 @@ concerts %>%
   geom_smooth()
 ```
 
-Andamento negli anni delle altre tipologie di concerti.
+Mi concentro sul periodo che va dal 2000 ad oggi.
 
 ```{r}
-concerts %>%
-  filter(year <= 2019) %>%
-  filter(eventType != "Subscription Season") %>%
-  group_by(year) %>%
-  count() %>%
-  ggplot(mapping = aes(x = year, y = n)) + 
-  geom_point() +
-  geom_smooth()
-```
-
-Mi concentro sul periodo che va dal 1975 ad oggi.
-
-```{r}
-concerts %>%
-  filter(year >= 1975 & year < 2020) %>%
+performances %>%
+  filter(orchestra == "New York Philharmonic") %>%
+  filter(year >= 2000) %>%
   mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
-  group_by(year,group) %>%
+  group_by(seasonN,group) %>%
   count() %>%
-  ggplot(aes(x = year, y = n, colour = group)) +
+  ggplot(aes(x = seasonN, y = n, colour = group)) +
   geom_point() +
   geom_smooth()
 ```
 
-Quali sono gli eventType preponderanti dal 1990 in poi?
+Quali sono gli eventType preponderanti dal 2000 in poi?
 
 ```{r}
-concerts %>%
-  filter(year >= 1990 & year < 2020) %>%
+performances %>%
+  filter(orchestra == "New York Philharmonic") %>%
+  filter(year >= 2000) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(year,eventType) %>%
+  group_by(seasonN,eventType) %>%
   count() %>%
-  ggplot(aes(x = year, y = n, color = eventType)) +
+  ggplot(aes(x = seasonN, y = n, color = eventType)) +
   geom_line(alpha = 1/2, show.legend = FALSE)
 ```
-Fra gli eventi che non fanno parte della stagione regolare, quelli più presenti con maggior continuità sono i tour.
+
+Fra gli eventi che non fanno parte della stagione regolare, quelli presenti con maggior continuità sono tour e 
+concerti non-subscription, quelli molto presenti in un periodo limitato il tipo bandwagon.
 
 ```{r}
-concerts %>%
-  filter(year >= 1990 & year < 2020) %>%
+performances %>%
+  filter(orchestra == "New York Philharmonic") %>%
+  filter(year >= 2000) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(year,eventType) %>%
+  ggplot(aes(y=eventType)) +
+  geom_bar()
+```
+
+
+```{r}
+performances %>%
+  filter(orchestra == "New York Philharmonic") %>%
+  filter(year >= 2000) %>%
+  filter(eventType != "Subscription Season") %>%
+  group_by(seasonN,eventType) %>%
   count() %>%
-  group_by(year) %>%
-  mutate(yearEvents = sum(n)) %>%
+  group_by(seasonN) %>%
+  mutate(seasonEvents = sum(n)) %>%
   ungroup() %>%
-  mutate(perc = n / yearEvents) %>%
-  group_by(year) %>%
-  mutate(order = row_number(-perc)) %>%
-  filter(order <= 2) %>%
+  mutate(perc = n / seasonEvents) %>%
+  group_by(seasonN) %>%
+  filter(perc > 0.2) %>%
   ungroup() %>%
   ggplot() +
-  geom_line(aes(year, n, color = eventType))
+  geom_point(aes(seasonN, perc, color = eventType)) +
+  geom_line(aes(seasonN, perc, color = eventType))
 ```
 
-Da ora in poi mi limito a lavorare sulla Subscription Season della New York Philharmonic.
-
 ```{r}
-ccseason <- ccseason %>%
+performances %>%
   filter(orchestra == "New York Philharmonic") %>%
-  filter(eventType == "Subscription Season")
+  filter(year >= 2000) %>%
+  filter(eventType != "Subscription Season") %>%
+  group_by(seasonN,eventType) %>%
+  count() %>%
+  group_by(seasonN) %>%
+  mutate(seasonEvents = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / seasonEvents) %>%
+  group_by(seasonN) %>%
+  filter(eventType == "Bandwagon")
 ```
 
-Come si è evoluto nelle stagioni il numero di rappresentazioni per compositore.
+Da ora in poi mi limito a considerare New York Philharmonic.
 
 ```{r}
-ccseason %>%
+performances <- performances %>%
+filter(orchestra == "New York Philharmonic")
+
+performances_works <- performances_works %>%
+  filter(orchestra == "New York Philharmonic")
+
+performances_works_complete <- performances_works_complete %>%
+  filter(orchestra == "New York Philharmonic")
+```
+
+Si possono trovare dei trend che ci permettano di dire qualcosa sulla popolarità di alcuni compositori nel corso del tempo?
+Qui sotto un grafico con stagioni - numero di performance per compositore.
+
+```{r}
+pcp <- performances %>%
+  group_by(seasonN,composerName) %>%
+  count() %>%
+  group_by(seasonN) %>%
+  mutate(totalSeason = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / totalSeason)
+
+ggplot(pcp,aes(seasonN, n, color = composerName)) +
+  geom_line(alpha = 1/4, show.legend = FALSE)
+```
+
+Questo fatto con le percentuali. Per ogni compositore, la percentuale di performance del compositore rispetto al totale della stagione.
+
+```{r}
+ggplot(pcp,aes(seasonN, perc, color = composerName)) +
+  geom_line(alpha = 1/4, show.legend = FALSE)
+```
+
+Costruisco un modello quadratico per tutti i compositori (dipendente percentuale, indipendenti stagione e stagione al quadrato). Tolgo i compositori che compaiono per meno di 11 stagioni.
+
+```{r}
+pcp <- pcp %>%
+  mutate(seasonN_2 = seasonN**2)
+
+tenorless <- performances %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 10)
+
+pcp_rid <- pcp %>%
+  anti_join(tenorless)
+
+pcp_nested <- pcp_rid %>%
+  group_by(composerName) %>%
+  nest()
+
+pcp_model <- function(df) {
+  lm(perc ~ seasonN + seasonN_2, data = df)
+}
+
+pcp_nested <- pcp_nested %>%
+  mutate(model = map(data, pcp_model))
+
+pcp_nested <- pcp_nested %>%
+  mutate(data = map2(data, model, add_residuals))
+
+pcp_nested <- pcp_nested %>% 
+  mutate(glance = map(model, broom::glance))
+
+pcp_models_simp <- pcp_nested %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest_longer(model) %>%
+  unnest_wider(model) %>%
+  select(composerName,term,estimate) %>%
+  pivot_wider(names_from = term,values_from = estimate)
+
+pcp_glance <- unnest(pcp_nested, glance, names_sep = "_")
+
+best <- pcp_glance %>%
+  filter(glance_adj.r.squared > 0.5) %>%
+  select(composerName)
+
+pcp_resids <- unnest(pcp_nested, data)
+```
+
+Modelli in cui tutte e due le componenti sono positive.
+
+```{r}
+up_up <- pcp_models_simp %>%
+  filter(seasonN > 0, seasonN_2 > 0) %>%
+  select(composerName) %>%
+  head(20)
+
+pcp %>%
+  semi_join(up_up) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Modelli in cui tutti e due gli elementi sono negativi.
+
+```{r}
+down_down <- pcp_models_simp %>%
+  filter(seasonN<0,seasonN_2<0) %>%
+  select(composerName) %>%
+  head(20)
+
+pcp %>%
+  semi_join(down_down) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Modelli in cui la parabola è positiva e la componente lineare è negativa. Prendo i migliori.
+
+```{r}
+down_up <- pcp_models_simp %>%
+  filter(seasonN<0,seasonN_2>0) %>%
+  select(composerName) %>%
+  inner_join(best) %>%
+  head(20)
+
+pcp %>%
+  semi_join(down_up) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Modelli in cui la parabola è negativa e in cui la componente lineare cresce. Filtrati per componente lineare più grande.
+
+```{r}
+up_down <- pcp_models_simp %>%
+  filter(seasonN>0,seasonN_2<0) %>%
+  arrange(seasonN) %>%
+  head(20) %>%
+  select(composerName)
+
+pcp %>%
+  semi_join(up_down) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+``` 
+
+Modelli in cui la parabola è negativa e in cui la componente lineare cresce. Filtrati per componente quadratica più grande.
+
+```{r}
+up_down_2 <- pcp_models_simp %>%
+  filter(seasonN>0,seasonN_2<0) %>%
+  arrange(seasonN_2) %>%
+  head(20) %>%
+  select(composerName)
+
+pcp %>%
+  semi_join(up_down_2) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Residui.
+
+```{r}
+pcp_resids %>%
+  ggplot(aes(resid)) +
+  geom_histogram()
+```
+
+Guardo ai residui più alti di 0.1
+
+```{r}
+highres <- pcp_resids %>%
+  filter(resid >= 0.1) %>%
+  distinct(composerName)
+
+pcp %>%
+  semi_join(highres) %>%
+  ggplot() +
+  geom_point(aes(x = seasonN, y = perc),alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Weber
+
+```{r}
+cs <- pcp %>%
+  select(seasonN,composerName,n,totalSeason,perc)
+
+cs %>%
+  inner_join(performances)
+
+performances %>%
+  group_by(seasonN, composerName) %>%
+  mutate(totalCompSeason = n()) %>%
+  group_by(season) %>%
+  mutate(totalSeason = n()) %>%
+  ungroup() %>%
+  mutate(perc = totalCompSeason / totalSeason) %>%
+  ungroup() %>%
+
+  filter(composerName == "Wagner, Richard") %>%
+  ggplot() +
+  geom_point(aes(seasonN,perc))
+```
+
+
+```{r}
+performances %>%
+  group_by(seasonN, composerName) %>%
+  mutate(totalCompSeason = n()) %>%
+  group_by(season) %>%
+  mutate(totalSeason = n()) %>%
+  ungroup() %>%
+  mutate(perc = totalCompSeason / totalSeason) %>%
+  ungroup() %>%
+
+  filter(composerName == "Weber, Carl Maria Von") %>%
+  ggplot() +
+  geom_point(aes(seasonN,perc))
+```
+
+```{r}
+performances %>%
+  group_by(seasonN, composerName) %>%
+  mutate(totalCompSeason = n()) %>%
+  group_by(season) %>%
+  mutate(totalSeason = n()) %>%
+  ungroup() %>%
+  mutate(perc = totalCompSeason / totalSeason) %>%
+  ungroup() %>%
+  filter(composerName == "Weber, Carl Maria Von") %>%
+  ggplot() +
+  geom_bar(aes(y=conductorName))
+```
+
+```{r}
+condperf <-
+  performances %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(totalCond = n()) %>%
+  group_by(seasonN,conductorName,composerName) %>%
+  mutate(composerCond = n()) %>%
+  ungroup() %>%
+  mutate(perc = composerCond / totalCond)
+
+condperf %>%
+  filter(composerName == "Weber, Carl Maria Von") %>%
+  ggplot(aes(seasonN,composerCond,color=conductorName)) +
+  geom_point(show.legend = FALSE)
+
+  inner_join(webercond)
+
+performances %>%
+  group_by(seasonN, composerName) %>%
+  mutate(totalCompSeason = n()) %>%
+  group_by(season) %>%
+  mutate(totalSeason = n()) %>%
+  ungroup() %>%
+  mutate(perc = totalCompSeason / totalSeason) %>%
+  ungroup() %>%
+  filter(composerName == "Weber, Carl Maria Von") %>%
+  ggplot() +
+  geom_point(aes(seasonN,perc,color=conductorName), show.legend = FALSE) +
+  coord_cartesian(xlim=c(0,50))
+```
+
+```{r}
+performances %>%
+  group_by(seasonN, composerName) %>%
+  mutate(totalCompSeason = n()) %>%
+  group_by(season) %>%
+  mutate(totalSeason = n()) %>%
+  ungroup() %>%
+  mutate(perc = totalCompSeason / totalSeason) %>%
+  ungroup() %>%
+  filter(composerName == "Weber, Carl Maria Von") %>%
+  filter(seasonN < 50) %>%
+  ggplot() +
+  geom_bar(aes(y = conductorName))
+```
+
+
+```{r}
+performances %>%
+  group_by(seasonN, composerName) %>%
+  mutate(totalCompSeason = n()) %>%
+  group_by(season) %>%
+  mutate(totalSeason = n()) %>%
+  ungroup() %>%
+  mutate(perc = totalCompSeason / totalSeason) %>%
+  ungroup() %>%
+  filter(composerName == "Weber, Carl Maria Von") %>%
+  filter(conductorName != "Bergmann, Carl") %>%
+  filter(conductorName != "Damrosch, Leopold") %>%
+  ggplot() +
+  geom_point(aes(seasonN,perc,color=conductorName), show.legend = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+eightorless <- performances %>%
+  filter(seasonN <= 80) %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 10)
+
+pcp_rid <- pcp %>%
+  filter(seasonN <= 80) %>%
+  anti_join(eightorless)
+
+pcp_nested <- pcp_rid %>%
+  group_by(composerName) %>%
+  nest()
+
+pcp_model <- function(df) {
+  lm(perc ~ seasonN, data = df)
+}
+
+pcp_nested <- pcp_nested %>%
+  mutate(model = map(data, pcp_model))
+
+pcp_nested <- pcp_nested %>%
+  mutate(data = map2(data, model, add_residuals))
+
+pcp_nested <- pcp_nested %>% 
+  mutate(glance = map(model, broom::glance))
+
+pcp_models <- pcp_nested %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN" | term == "seasonN_2")
+
+pcp_models <- unnest(pcp_models, glance, names_sep = "_")
+
+pcp_resids <- unnest(pcp_models, data)
+```
+
+
+
+
+
+
+```{r}
+pcp <- pcp %>%
+  mutate(seasonN_2 = seasonN**2)
+
+eightorless <- performances %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 10)
+
+pcp_rid <- pcp %>%
+  anti_join(eightorless)
+
+pcp_nested <- pcp_rid %>%
+  group_by(composerName) %>%
+  nest()
+
+pcp_model <- function(df) {
+  lm(perc ~ seasonN + seasonN_2, data = df)
+}
+
+pcp_nested <- pcp_nested %>%
+  mutate(model = map(data, pcp_model))
+
+pcp_nested <- pcp_nested %>%
+  mutate(data = map2(data, model, add_residuals))
+
+pcp_nested <- pcp_nested %>% 
+  mutate(glance = map(model, broom::glance))
+
+pcp_models <- pcp_nested %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN" | term == "seasonN_2")
+
+pcp_nested %>%
+  unnest_wider(model)
+
+pcp_models_simp <- pcp_nested %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest_longer(model) %>%
+  unnest_wider(model) %>%
+  select(composerName,term,estimate) %>%
+  pivot_wider(names_from = term,values_from = estimate)
+
+pcp_models <- unnest(pcp_models, glance, names_sep = "_")
+
+pcp_resids <- unnest(pcp_models, data)
+```
+
+Modelli in cui tutte e due le componenti sono positive.
+
+```{r}
+up_up <- pcp_models_simp %>%
+  filter(seasonN>0,seasonN_2>0) %>%
+  select(composerName) %>%
+  head(20)
+
+pcp %>%
+  semi_join(up_up) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Modelli in cui tutti e due gli elementi sono negativi.
+
+```{r}
+down_down <- pcp_models_simp %>%
+  filter(seasonN<0,seasonN_2<0) %>%
+  select(composerName) %>%
+  head(20)
+
+pcp %>%
+  semi_join(down_down) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Modelli in cui la parabola è positiva e la componente lineare è negativa
+
+```{r}
+down_up <- pcp_models_simp %>%
+  filter(seasonN<0,seasonN_2>0) %>%
+  select(composerName) %>%
+  head(20)
+
+pcp %>%
+  semi_join(down_up) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Modelli in cui la parabola è negativa e in cui la componente lineare cresce. 
+
+```{r}
+up_down <- pcp_models_simp %>%
+  filter(seasonN>0,seasonN_2<0) %>%
+  select(composerName) %>%
+  head(20)
+
+pcp %>%
+  semi_join(up_down) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+down_slopes <- pcp_models %>%
+  arrange(estimate) %>%
+up_slopes <- pcp_models %>%
+  filter(term == "seasonN") %>%
+  arrange(-estimate) %>%
+  head(20)
+
+pcp %>%
+  filter(seasonN <= 80) %>%
+  semi_join(up_slopes) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)  head(20)
+
+pcp %>%
+  semi_join(down_slopes) %>%
+  filter(seasonN < 70) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+
+Costruisco un modello lineare anno - percentuale rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 11 stagioni.
+
+```{r}
+eightorless <- performances %>%
+  filter(seasonN >= 80) %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 10)
+
+pcp_rid <- pcp %>%
+  filter(seasonN >= 80) %>%
+  anti_join(eightorless)
+
+pcp_nested <- pcp_rid %>%
+  group_by(composerName) %>%
+  nest()
+
+pcp_model <- function(df) {
+  lm(perc ~ seasonN, data = df)
+}
+
+pcp_nested <- pcp_nested %>%
+  mutate(model = map(data, pcp_model))
+
+pcp_nested <- pcp_nested %>%
+  mutate(data = map2(data, model, add_residuals))
+
+pcp_nested <- pcp_nested %>% 
+  mutate(glance = map(model, broom::glance))
+
+pcp_models <- pcp_nested %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN" | term == "seasonN_2")
+
+pcp_models <- unnest(pcp_models, glance, names_sep = "_")
+
+pcp_resids <- unnest(pcp_models, data)
+```
+
+```{r}
+up_slopes <- pcp_models %>%
+  filter(term == "seasonN") %>%
+  arrange(-estimate) %>%
+  head(20)
+
+pcp %>%
+  filter(seasonN >= 80) %>%
+  semi_join(up_slopes) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+
+good <- pcp_models %>%
+  filter(glance_r.squared > 0.70) %>%
+  head(20) %>%
+  select(composerName)
+
+pcp %>%
+  filter(seasonN >= 80) %>%
+  semi_join(good) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+
+bad <- pcp_models %>%
+  filter(glance_r.squared < 0.30) %>%
+  head(20) %>%
+  select(composerName)
+
+pcp %>%
+  filter(seasonN <= 80) %>%
+  semi_join(bad) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+
+down_slopes <- pcp_models %>%
+  filter(term == "seasonN") %>%
+  arrange(estimate) %>%
+  head(20)
+
+pcp %>%
+  filter(seasonN >= 80) %>%
+  semi_join(down_slopes) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Costruisco un modello lineare anno - percentuale rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 11 stagioni.
+
+```{r}
+tenorless <- performances %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 10)
+
+pcprid <- pcp %>%
+  filter(seasonN > 70) %>%
+  anti_join(tenorless)
+
+pcpn <- pcprid %>%
+  group_by(composerName) %>%
+  nest()
+
+pcp_model <- function(df) {
+  lm(perc ~ seasonN, data = df)
+}
+
+pcpn <- pcpn %>%
+  mutate(model = map(data, pcp_model))
+
+pcpn <- pcpn %>%
+  mutate(data = map2(data, model, add_residuals))
+
+pcpn <- pcpn %>% 
+  mutate(glance = map(model, broom::glance))
+
+pcp_models <- pcpn %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN")
+
+pcp_models <- unnest(pcp_models, glance, names_sep = "_")
+
+pcp_resids <- unnest(pcp_models, data)
+```
+
+```{r}
+up_slopes <- pcp_models %>%
+  arrange(-estimate) %>%
+  head(20)
+
+pcp %>%
+  semi_join(up_slopes) %>%
+  filter(seasonN > 70) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+```{r}
+down_slopes <- pcp_models %>%
+  arrange(estimate) %>%
+  head(20)
+
+pcp %>%
+  semi_join(down_slopes) %>%
+  filter(seasonN > 70) %>%
+  ggplot(aes(x = seasonN, y = perc)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+Costruisco un modello lineare anno - numero rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 11 stagioni.
+
+```{r}
+tenorless <- performances %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 10)
+
+pcnrid <- pcp %>%
+  anti_join(tenorless)
+
+pcnn <- pcnrid %>%
+  group_by(composerName) %>%
+  nest()
+
+pcn_model <- function(df) {
+  lm(n ~ seasonN, data = df)
+}
+
+pcnn <- pcnn %>%
+  mutate(model = map(data, pcn_model))
+
+pcnn <- pcnn %>%
+  mutate(data = map2(data, model, add_residuals))
+
+pcnn <- pcnn %>% 
+  mutate(glance = map(model, broom::glance))
+
+pcn_models <- pcnn %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN")
+
+pcn_models <- unnest(pcn_models, glance, names_sep = "_")
+
+pcn_resids <- unnest(pcn_models, data)
+```
+
+```{r}
+up_slopes <- pcn_models %>%
+  arrange(-estimate) %>%
+  head(20)
+
+pcp %>%
+  semi_join(up_slopes) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+```{r}
+down_slopes <- pcn_models %>%
+  arrange(estimate) %>%
+  head(20)
+
+pcp %>%
+  semi_join(down_slopes) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+
+```{r}
+pcn_resids %>%
+  ggplot() +
+  geom_histogram(aes(resid,binwidth = 5)) +
+  coord_cartesian(ylim = c(0,100))
+```
+
+```{r}
+highres <- pcn_resids %>%
+  filter(resid > 40) %>%
+  select(composerName)
+```
+
+```{r}
+
+  
+  performances %>%
+  group_by(seasonN,composerName) %>%
+  count() %>%
+  group_by(seasonN) %>%
+  mutate(totalSeason = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / totalSeason) %>%
+  anti_join(highres) %>%
+  ggplot(aes(seasonN, n, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+
+pcn_resids %>%
+  ggplot(aes(seasonN, resid, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+
+
+  
+  
+```
+
+```{r}
+pcp
+
+pcpn <- pcp %>%
+  group_by(composerName) %>%
+  nest()
+
+pcpn_models <- pcpn %>%
+  mutate(models = map(data, ~ glm(cbind(n, totalSeason) ~ seasonN, ., family = "binomial")))
+
+pcpn <- pcpn %>%
+  mutate(model = map(data, pcp_model))
+
+pcpn <- pcpn_models %>%
+  mutate(data = map2(data, models, add_residuals))
+
+pcpn_models <- pcpn_models %>% 
+  mutate(glance = map(model, broom::glance))
+
+pcp_models <- pcpn %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN")
+
+pcp_models <- unnest(pcp_models, glance, names_sep = "_")
+
+pcp_resids <- unnest(pcp_models, data)
+```
+
+
+```{r}
+composers = n_distinct(pwp$composerName)
+
+pwprid <- pwp %>%
+  group_by(composerName) %>%
+  mutate(
+    min = min(seasonN),
+    max = max(seasonN),
+    span = max - min + 1,
+    seasons = n_distinct(seasonN),
+    density = seasons / span
+  ) %>%
+  filter(density < 1 & density > 0.1)
+
+composers2 = n_distinct(pwprid$composerName)
+```
+
+
+
+```{r}
+pwp <- performances_works %>%
+  group_by(seasonN,composerName) %>%
+  count() %>%
+  group_by(seasonN) %>%
+  mutate(totalSeason = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / totalSeason) %>%
+  (ungroup)
+```
+
+```{r}
+pw <- pwprid %>%
+  group_by(composerName) %>%
+  nest()
+
+pw_model <- function(df) {
+  lm(perc ~ seasonN, data = df)
+}
+
+pw <- pw %>%
+  mutate(model = map(data, pw_model))
+
+pw <- pw %>% 
+  mutate(data = map2(data, model, add_residuals))
+
+pw <- pw %>% 
+  mutate(glance = map(model, broom::glance))
+
+pw_models <- pw %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN")
+
+pw_models <- unnest(pw_models, glance, names_sep = "_")
+
+pw_resids <- unnest(pw_models, data)
+```
+
+
+```{r}
+pw_models %>%
+  filter(glance_r.squared != 1) %>%
+  arrange(-glance_r.squared)
+```
+
+```{r}
+rsq20 <- pw_models %>%
+  filter(glance_r.squared != 1) %>%
+  arrange(-estimate) %>%
+  select(composerName) %>%
+  head(20)
+```
+
+```{r}
+performances %>%
+  group_by(seasonN,composerName) %>%
+  count() %>%
+  group_by(seasonN) %>%
+  mutate(totalSeason = sum(n)) %>%
+  ungroup() %>%
+  mutate(perc = n / totalSeason) %>%
+ggplot(aes(seasonN, perc, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+
+pwp %>%
+  inner_join(rsq20) %>%
+  ggplot(aes(seasonN,perc,color=composerName)) +
+  geom_line(show.legend = FALSE) +
+  facet_wrap(~composerName)
+```
+
+
+
+
+Come si è evoluto nelle stagioni il numero di performance per compositore.
+
+```{r}
+performances %>%
   group_by(seasonN,composerName) %>%
   count() %>%
   ggplot() +
   geom_line(alpha = 1/2, aes(seasonN, n, color = composerName), show.legend = FALSE)
 ```
 
+Costruisco un modello lineare anno-rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 8 stagioni.
+
+```{r}
+eightorless <- performances %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 8)
+
+pwc <- performances %>%
+  anti_join(eightorless) %>%
+  group_by(composerName,seasonN) %>%
+  count()
+
+pw <- pwc %>%
+  group_by(composerName) %>%
+  nest()
+
+pw_model <- function(df) {
+  lm(n ~ seasonN, data = df)
+}
+
+pw <- pw %>%
+  mutate(model = map(data, pw_model))
+
+pw <- pw %>% 
+  mutate(data = map2(data, model, add_residuals))
+
+pw <- pw %>% 
+  mutate(glance = map(model, broom::glance))
+
+pw_models <- pw %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN")
+
+pw_models <- unnest(pw_models, glance, names_sep = "_")
+
+pw_resids <- unnest(pw_models, data)
+```
+
+Guardo ai residui. Ci sono un po' di residui molto alti, sopra a 50.
+
+```{r}
+pw_resids %>%
+  ggplot(aes(resid)) +
+  geom_histogram(binwidth = 5) +
+  coord_cartesian(ylim = c(0,100))
+```
+
+Mi concentro su questi.
+
+```{r}
+highres <- pw_resids %>%
+  filter(resid > 40) %>%
+  select(composerName)
+highres
+```
+
+```{r}
+pwc %>%
+  inner_join(highres, by = join_by(composerName)) %>%
+  ggplot(aes(seasonN,n)) +
+    geom_point(alpha = 1/4) +
+    facet_wrap(~composerName)
+```
+
+```{r}
+best <- pw_models %>%
+  arrange(-glance_r.squared) %>%
+  head(10)
+
+worst <- pw_models %>%
+  arrange(glance_r.squared) %>%
+  head(10)
+```
+
+```{r}
+up_slopes <- pw_models %>%
+  arrange(-estimate) %>%
+  head(10)
+
+pwc %>%
+  semi_join(up_slopes) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+```{r}  
+down_slopes <- pw_models %>%
+  arrange(estimate) %>%
+  head(10)
+
+pwc %>%
+  semi_join(down_slopes) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+Filtro le stagioni in cui c'è stato il massimo di performance.
+
+```{r}
+performances_works %>%
+  inner_join(highres) %>%
+  group_by(composerName, seasonN, season) %>%
+  count() %>%
+  group_by(composerName) %>%
+  mutate(max = max(n)) %>%
+  filter (n == max) %>%
+  ungroup()
+```
+
+Da ora in poi mi limito a considerare la Subscription Season della New York Philharmonic.
+
+```{r}
+performances_works_complete <- performances_works_complete %>%
+  filter(orchestra == "New York Philharmonic") %>%
+  filter(eventType == "Subscription Season")
+```
+
+Come si è evoluto nelle stagioni il numero di performance per compositore.
+
+```{r}
+performances_works_complete %>%
+  group_by(seasonN,composerName) %>%
+  count() %>%
+  ggplot() +
+  geom_line(alpha = 1/2, aes(seasonN, n, color = composerName), show.legend = FALSE)
+```
+
+Costruisco un modello lineare anno-rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 8 stagioni.
+
+```{r}
+eightorless_c <- performances_works_complete %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 8)
+
+pwc_c <- performances_works_complete %>%
+  anti_join(eightorless_c) %>%
+  group_by(composerName,seasonN) %>%
+  count()
+
+pwc_c <- performances_works_complete %>%
+  anti_join(eightorless_c) %>%
+  group_by(composerName,seasonN) %>%
+  count()
+
+pw_c <- pwc_c %>%
+  group_by(composerName) %>%
+  nest()
+
+pw_c_model <- function(df) {
+  lm(n ~ seasonN, data = df)
+}
+
+pw_c <- pw_c %>%
+  mutate(model = map(data, pw_c_model))
+
+pw_c <- pw_c %>% 
+  mutate(data = map2(data, model, add_residuals))
+
+pw_c <- pw_c %>% 
+  mutate(glance = map(model, broom::glance))
+
+pw_c_models <- pw_c %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN")
+
+pw_c_models <- unnest(pw_c_models, glance, names_sep = "_")
+
+pw_c_resids <- unnest(pw_c_models, data)
+```
+
+Guardo ai residui. Ci sono un po' di residui molto alti, sopra a 50.
+
+```{r}
+pw_c_resids %>%
+  ggplot(aes(resid)) +
+  geom_histogram(binwidth = 5) +
+  coord_cartesian(ylim = c(0,100))
+```
+
+Mi concentro su questi.
+
+```{r}
+highres_c <- pw_c_resids %>%
+  filter(resid > 25) %>%
+  select(composerName)
+highres_c
+```
+
+```{r}
+pwc_c %>%
+  inner_join(highres_c, by = join_by(composerName)) %>%
+  ggplot(aes(seasonN,n)) +
+    geom_point(alpha = 1/4) +
+    facet_wrap(~composerName)
+```
+
+```{r}
+best_c <- pw_c_models %>%
+  arrange(-glance_r.squared) %>%
+  head(10)
+
+worst_c <- pw_c_models %>%
+  arrange(glance_r.squared) %>%
+  head(10)
+```
+
+```{r}
+up_slopes_c <- pw_c_models %>%
+  arrange(-estimate) %>%
+  head(10)
+
+pwc_c %>%
+  semi_join(up_slopes_c) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+```{r}  
+down_slopes_c <- pw_c_models %>%
+  arrange(estimate) %>%
+  head(10)
+
+pwc %>%
+  semi_join(down_slopes_c) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+
+```{r}
+performances_works_complete %>%
+  group_by(seasonN) %>%
+  count() %>%
+  ggplot() +
+  geom_point(aes(seasonN,n))
+```
+
+```{r}
+performances_works_complete %>%
+  group_by(seasonN) %>%
+  count() %>%
+  filter(n > 100)
+```
+
+
+Costruisco un modello lineare anno-rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 8 stagioni.
+
+```{r}
+eightorless_c <- performances_works_complete %>%
+  filter(seasonN > 68) %>%
+  group_by(composerName) %>%
+  summarise(seasons = n_distinct(seasonN)) %>%
+  filter(seasons <= 8)
+
+prwc_c <- performances_works_complete %>%
+  filter(seasonN > 68) %>%
+  anti_join(eightorless_c) %>%
+  group_by(composerName,seasonN) %>%
+  count()
+
+prw_c <- prwc_c %>%
+  group_by(composerName) %>%
+  nest()
+
+prw_c_model <- function(df) {
+  lm(n ~ seasonN, data = df)
+}
+
+prw_c <- prw_c %>%
+  mutate(model = map(data, prw_c_model))
+
+prw_c <- prw_c %>% 
+  mutate(data = map2(data, model, add_residuals))
+
+prw_c <- prw_c %>% 
+  mutate(glance = map(model, broom::glance))
+
+prw_c_models <- prw_c %>%
+  mutate(model = map(model, tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN")
+
+prw_c_models <- unnest(prw_c_models, glance, names_sep = "_")
+
+prw_c_resids <- unnest(prw_c_models, data)
+```
+
+Guardo ai residui. Ci sono un po' di residui molto alti, sopra a 50.
+
+```{r}
+prw_c_resids %>%
+  ggplot(aes(resid)) +
+  geom_histogram(binwidth = 5) +
+  coord_cartesian(ylim = c(0,100))
+```
+
+Mi concentro su questi.
+
+```{r}
+highres_c <- prw_c_resids %>%
+  filter(resid > 25) %>%
+  select(composerName)
+highres_c
+```
+
+```{r}
+prwc_c %>%
+  inner_join(highres_c, by = join_by(composerName)) %>%
+  ggplot(aes(seasonN,n)) +
+    geom_point(alpha = 1/4) +
+    facet_wrap(~composerName)
+```
+
+```{r}
+highres_c <- prw_c_resids %>%
+  filter(resid > 20) %>%
+  select(composerName)
+highres_c
+```
+
+```{r}
+prwc_c %>%
+  anti_join(highres_c, by = join_by(composerName)) %>%
+  ggplot(aes(seasonN,n,color=composerName)) +
+    geom_point(alpha = 1/4,show.legend = FALSE)
+```
+
+```{r}
+best_c <- prw_c_models %>%
+  arrange(-glance_r.squared) %>%
+  head(10)
+
+worst_c <- prw_c_models %>%
+  arrange(glance_r.squared) %>%
+  head(10)
+```
+
+```{r}
+up_slopes_c <- prw_c_models %>%
+  arrange(-estimate) %>%
+  head(10)
+
+prwc_c %>%
+  semi_join(up_slopes_c) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+```{r}  
+down_slopes_c <- prw_c_models %>%
+  arrange(estimate) %>%
+  head(10)
+
+prwc_c %>%
+  semi_join(down_slopes_c) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_point(alpha = 1/4) +
+  facet_wrap(~composerName)
+```
+
+
+```{r}
+performances_works_complete %>%
+  filter(composerName == "Wagner,  Richard")
+  
+  group_by(seasonN) %>%
+  count() %>%
+  ggplot() +
+  geom_point(aes(seasonN,n))
+```
+
+```{r}
+
+```
+
+
+
+
+
+Filtro le stagioni in cui c'è stato il massimo di performance.
+
+```{r}
+performances_works %>%
+  inner_join(highres) %>%
+  group_by(composerName, seasonN, season) %>%
+  count() %>%
+  group_by(composerName) %>%
+  mutate(max = max(n)) %>%
+  filter (n == max) %>%
+  ungroup()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Costruisco un modello lineare anno-rappresentazioni per tutti i compositori. Tolgo i compositori che compaiono per meno di 11 stagioni.
 
 ```{r}
-tenorless <- ccseason %>%
+complete <- complete %>%
+  filter(orchestra == "New York Philharmonic") %>%
+  filter(eventType == "Subscription Season")
+
+tenorless <- complete %>%
   group_by(composerName) %>%
   summarise(seasons = n_distinct(seasonN)) %>%
   filter(seasons <= 10)
 
-sc <- ccseason %>%
+sc <- complete %>%
   anti_join(tenorless) %>%
   group_by(composerName,seasonN) %>%
   count() %>%
@@ -576,6 +2028,9 @@ sc <- sc %>%
 sc <- sc %>% 
   mutate(data = map2(data, model, add_residuals))
 
+sc <- sc %>% 
+  mutate(glance = map(model, broom::glance))
+
 models <- sc %>%
   mutate(model = map(model, tidy)) %>%
   unnest(cols = c(model))
@@ -587,6 +2042,57 @@ slopes %>%
   ggplot() +
   geom_histogram(aes(x=estimate))
 ```
+
+pendenza crescente
+
+```{r}
+upslopes <- slopes %>%
+  filter(estimate > 0) %>%
+  arrange(-estimate) %>%
+  head(20)
+
+models %>%
+  unnest(data) %>%
+  semi_join(upslopes) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_line() +
+  facet_wrap(~composerName)
+```
+
+decrescente
+
+```{r}
+downslopes <- slopes %>%
+  filter(estimate < 0) %>%
+  arrange(estimate) %>%
+  head(20)
+
+models %>%
+  unnest(data) %>%
+  semi_join(downslopes) %>%
+  ggplot(aes(x = seasonN, y = n)) +
+  geom_line() +
+  facet_wrap(~composerName)
+```
+
+
+
+```{r}
+programsT %>%
+  filter(programID == 7987)
+```
+
+```{r}
+programsT %>%
+  filter(workID == 52446) %>%
+  filter(!is.na(movID))
+```
+
+
+
+
+
+
 
 Pendenza crescente.
 
@@ -1166,13 +2672,24 @@ nested_ncp_models_2 %>%
   geom_histogram(aes(estimate))
 ```
 
+modelli sostanzialmente stabili
 
 ```{r}
+stab_ncp_2 <- nested_ncp_models_2 %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model)) %>%
+  filter(term == "seasonN") %>%
+  filter(estimate < 0.01) %>%
+  filter(estimate > -0.01)
+
+ncp %>%
+  inner_join(stab_ncp_2) %>%
+  ggplot(aes(seasonN,percComp,color=conductorName)) +
+  geom_line() +
+  geom_point(aes(seasonN,percComp))
+
+
 ```
-
-
-
-
 
 ```{r}
 
@@ -1187,6 +2704,40 @@ nested_ncp_models_2 <- nested_ncp_models_2 %>%
 glance <- unnest(nested_ncp_models_2, glance)
 
 ```
+
+```{r}
+
+models_ncp2 <- nested_ncp_models_2 %>%
+  mutate(model = map(model,tidy)) %>%
+  unnest(cols = c(model))
+
+glancem <- unnest(models_ncp2,glance,names_sep = ".")
+
+glancem %>%
+  filter(glance.r.squared > 0.75) %>%
+  filter(term == "seasonN") %>%
+  arrange(-estimate) %>%
+  head(10)
+
+glancem %>%
+  filter(glance.r.squared > 0.75) %>%
+  filter(term == "seasonN") %>%
+  arrange(estimate) %>%
+  head(10)
+
+glancem %>%
+  filter(glance.r.squared > 0.75) %>%
+  filter(term == "seasonN") %>%
+  filter(estimate < 0.01) %>%
+  filter(estimate > -0.01) %>%
+  head(10)
+
+
+```
+
+
+
+
 
 Modelli che fittano bene
 
@@ -1233,6 +2784,176 @@ ncp %>%
   ggplot(aes(seasonN, percComp, color = conductorName)) +
   geom_line()
 ```
+
+```{r}
+performances <- performances %>%
+  filter(orchestra == "New York Philharmonic")
+```
+
+
+
+```{r}
+ccn <- performances %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  group_by(seasonN,conductorName,composerName) %>%
+  count() %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(condRep = sum(n)) %>%
+  ungroup() %>%
+  group_by(conductorName,composerName) %>%
+  mutate(seasons = n_distinct(seasonN)) %>%
+  ungroup()
+
+nested_ccn <- ccn %>%
+  filter(seasons > 5) %>%
+  group_by(conductorName, composerName) %>%
+  nest()
+
+ccn_models <- nested_ccn %>%
+  mutate(models = map(data, ~ glm(cbind(n, condRep) ~ seasonN, ., family = "binomial")))
+
+ccn_slopes <- ccn_models %>%
+  mutate(models = map(models, tidy)) %>%
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonN") %>%
+  mutate(adjusted.p.value = p.adjust(p.value))
+```
+
+```{r}
+up_slopes <-
+  ccn_slopes %>%
+  filter(p.value < 0.05) %>%
+  arrange(-estimate) %>%
+  select(conductorName,composerName) %>%
+  mutate(type = "UP") %>%
+  head(20)
+```
+
+```{r}
+down_slopes <-
+  ccn_slopes %>%
+  filter(p.value < 0.05) %>%
+  arrange(estimate) %>%
+  select(conductorName,composerName) %>%
+  mutate(type = "DOWN") %>%
+  head(20)
+```
+
+```{r}
+updown <- bind_rows(up_slopes,down_slopes)
+```
+
+```{r}
+ccn %>%
+  inner_join(updown) %>%
+  ggplot(aes(seasonN,n/condRep,color=type)) +
+  geom_line() +
+  facet_wrap(~conductorName)
+```
+
+
+```{r}
+
+prova <- ccn_models %>%
+  mutate(models = map(models, tidy)) %>%
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonN") %>%
+  mutate(adjusted.p.value = p.adjust(p.value)) %>%
+  unnest(glance)
+
+prova$data [[1]]
+
+```
+
+
+```{r}
+ccn %>%
+  filter(conductorName == "Toscanini, Arturo") %>%
+  left_join(updown) %>%
+  ggplot(aes(seasonN,n/condRep,color=composerName)) +
+  geom_line(alpha = 1/2,show.legend = FALSE)
+```
+
+
+
+```{r}
+ccn_models <- ccn_models %>% 
+  mutate(data = map2(data, models, spread_residuals))
+
+ccn_models <- ccn_models %>% 
+  mutate(glance = map(models, broom::glance))
+
+glance <- unnest(ccn_models,glance)
+
+glance <-
+  glance %>%
+  mutate(rsq = 1 - (deviance/null.deviance))
+
+best <- glance %>%
+  arrange(-rsq) %>%
+  filter(rsq >= 0.75) %>%
+  select(conductorName,composerName)
+
+worst <- glance %>%
+  filter(rsq <= 0.75) %>%
+  arrange(rsq) %>%
+  select(conductorName,composerName)
+
+bestloglik <- glance %>%
+  arrange(-logLik) %>%
+  head(20) %>%
+  select(conductorName,composerName)
+
+```
+
+```{r}
+ggplot(glance) +
+  geom_histogram(aes(rsq))
+```
+
+
+```{r}
+ccn %>%
+  inner_join(bestloglik, by = c("conductorName", "composerName")) %>%
+  ggplot(aes(seasonN, n/condRep, color = conductorName)) +
+  geom_line(alpha = 1/3) +
+  labs(x = NULL, y = "Perc")
+```
+
+```{r}
+ccn %>%
+  inner_join(worst, by = c("conductorName", "composerName")) %>%
+  ggplot(aes(seasonN, n/condRep, color = conductorName)) +
+  geom_line(alpha = 1/3, show.legend = FALSE) +
+  labs(x = NULL, y = "Perc")
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
