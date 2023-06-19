@@ -1,8 +1,11 @@
 ---
 title: "Presentazione"
 author: "Marco Villotta"
-date: "2023-06-10"
-output: ioslides_presentation
+date: "2023-06-23"
+output:
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
 ---
 
 ```{r setup, include=FALSE}
@@ -15,11 +18,61 @@ This is an R Markdown presentation. Markdown is a simple formatting syntax for a
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
 
+Ciao sono Marco.
+
+Ciao
+
 ## Slide with Bullets
 
 - Bullet 1
 - Bullet 2
 - Bullet 3
+ciao sono marco
+ciao ciao
+
+## Dataset usato
+
+New York Philharmonic, pubblicato su https://github.com/nyphilarchive/PerformanceHistory e disponibile in XML o JSON (che ho usato).
+
+Orchestra americana, ancora attiva, fondata nel 1842.
+
+Il dataset contiene sostanzialmente il programma dell'attività dell'orchestra, organizzato in questo modo:
+
+```{js echo = TRUE}
+  "programs": [
+    {
+      "id": "38e072a7-8fc9-4f9a-8eac-3957905c0002", // GUID
+      "programID": "3853", // NYP Local ID
+      "orchestra": "New York Philharmonic",
+      "season": "1842-43",
+          "concerts": [ { ... }, /* A program can have multiple concerts */ ],
+      "works": [ {
+          "composerName": "Weber,  Carl  Maria Von",
+          "workTitle": "OBERON",
+          "conductorName": "Timm, Henry C.",
+        "soloists": [ ... ] }, /* a program will usually have multiple works */ { ... }, ] },
+    /* more programs */
+  ]
+```
+
+## Compositori nel tempo
+
+Come evolve negli anni il repertorio dell'orchestra? Ci sono compositori per cui cresce o diminuisce il numero di rappresentazioni?
+
+Per farlo ho calcolato per ogni stagione la percentuale di performance di ogni compositore rappresentato sul totale di performance della stagione. Sono partito da questo plot:
+
+PLOT
+
+## Compositori nel tempo - 
+
+## Distribuzione 
+
+
+## Repertori dei conduttori
+
+Come evolve negli anni il repertorio dei compositori? Ci sono compositori per cui cresce o diminuisce il numero di rappresentazioni?
+
+
 
 ## Slide with R Output
 
