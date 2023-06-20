@@ -399,7 +399,7 @@ performances <- programsT %>%
   mutate(year = year(Date)) %>%
   mutate(seasonN = dense_rank(season)) %>%
   group_by(seasonN) %>%
-  mutate(seasonYear = first(year)) %>%
+  mutate(seasonYear = sapply(season,function (x) as.integer(str_extract(x, "[[:digit:]]+")))) %>%
   ungroup()
 
 performances_works <- programsT %>%
@@ -436,18 +436,6 @@ performances %>%
   geom_point()
 ```
 
-
-
-```{r}
-performances %>%
-  group_by(seasonYear) %>%
-  count() %>%
-  ggplot(mapping = aes(x = seasonYear, y = n)) + 
-  geom_point() +
-  geom_vline(aes(xintercept = 1909, color = "red")) +
-  coord_cartesian(xlim = c(1840,1940))
-```
-
 Che tipi di performance ci sono. Mi limito alle categorie che contengono più di 100 performance.
 
 ```{r}
@@ -472,33 +460,23 @@ performances %>%
 ```{r}
 performances %>%
   filter(orchestra == "New York Philharmonic") %>%
-  group_by(seasonN) %>%
-  count() %>%
-  ggplot(mapping = aes(x = seasonN, y = n)) + 
-  geom_point() +
-  geom_vline(aes(xintercept = 68, color = "red"))
-```
-
-```{r}
-performances %>%
-  filter(orchestra == "New York Philharmonic") %>%
   mutate(group = if_else(eventType == "Subscription Season", "SUB", "REST")) %>%
-  group_by(seasonN,group) %>%
+  group_by(seasonYear,group) %>%
   count() %>%
-  ggplot(aes(x = seasonN, y = n, colour = group)) +
+  ggplot(aes(x = seasonYear, y = n, colour = group)) +
   geom_point()
 ```
 
-Quali sono gli eventType preponderanti dal 2000 in poi?
+Quali sono gli eventType preponderanti dal 2000 in poi non di tipo Subscription Season?
 
 ```{r}
 performances %>%
   filter(orchestra == "New York Philharmonic") %>%
   filter(year >= 2000) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(seasonN,eventType) %>%
+  group_by(seasonYear,eventType) %>%
   count() %>%
-  ggplot(aes(x = seasonN, y = n, color = eventType)) +
+  ggplot(aes(x = seasonYear, y = n, color = eventType)) +
   geom_line(alpha = 1/2, show.legend = FALSE)
 ```
 
@@ -520,18 +498,18 @@ performances %>%
   filter(orchestra == "New York Philharmonic") %>%
   filter(year >= 2000) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(seasonN,eventType) %>%
+  group_by(seasonYear,eventType) %>%
   count() %>%
-  group_by(seasonN) %>%
+  group_by(seasonYear) %>%
   mutate(seasonEvents = sum(n)) %>%
   ungroup() %>%
   mutate(perc = n / seasonEvents) %>%
-  group_by(seasonN) %>%
+  group_by(seasonYear) %>%
   filter(perc > 0.2) %>%
   ungroup() %>%
   ggplot() +
-  geom_point(aes(seasonN, perc, color = eventType)) +
-  geom_line(aes(seasonN, perc, color = eventType))
+  geom_point(aes(seasonYear, perc, color = eventType)) +
+  geom_line(aes(seasonYear, perc, color = eventType))
 ```
 
 ```{r}
@@ -539,13 +517,13 @@ performances %>%
   filter(orchestra == "New York Philharmonic") %>%
   filter(year >= 2000) %>%
   filter(eventType != "Subscription Season") %>%
-  group_by(seasonN,eventType) %>%
+  group_by(seasonYear,eventType) %>%
   count() %>%
-  group_by(seasonN) %>%
+  group_by(seasonYear) %>%
   mutate(seasonEvents = sum(n)) %>%
   ungroup() %>%
   mutate(perc = n / seasonEvents) %>%
-  group_by(seasonN) %>%
+  group_by(seasonYear) %>%
   filter(eventType == "Bandwagon")
 ```
 
@@ -660,7 +638,26 @@ performances %>%
   distinct(perc)
 ```
 
-Un altro subset, compositori rappresentati prima della stagione 1909, per almeno 70 stagioni con densità 50 %. Rappresentano il 76 % delle performance.
+```{r}
+over40 <- performances %>%
+  group_by(composerName) %>%
+  mutate(
+    seasons = n_distinct(seasonYear),
+    first = min(seasonYear),
+    last = max(seasonYear),
+    span = last - first + 1,
+    density = seasons / span) %>%
+  filter(seasons >= 40 & density > 0.70) %>%
+  distinct(composerName)
+
+performances %>%
+  mutate (totali = n()) %>%
+  inner_join(over40) %>%
+  mutate (over40 = n(), perc = over40 / totali) %>%
+  distinct(perc)
+```
+
+Un altro subset, compositori rappresentati prima della stagione 1909, per almeno 10 stagioni. Rappresentano il 76 % delle performance.
 
 ```{r}
 before_1909 <- performances %>%
@@ -811,7 +808,7 @@ ggplot(
   facet_wrap(~composerName)
 ```
 
-Quelli che sono stati rappresentati prima della stagione 1909-1910.
+Quelli che sono stati rappresentati prima della stagione 1909-1910 per almeno dieci stagioni.
 
 ```{r}
 ggplot(
@@ -877,118 +874,6 @@ pcp %>%
   
 ```
 
-
-
-```{r}
-pcp %>%
-  group_by(seasonN) %>%
-  arrange(-perc) %>%
-  mutate(
-    rank = row_number(perc)
-  ) %>%
-  arrange(seasonN) %>%
-  filter(rank <= 2) %>%
-  ggplot() +
-  geom_point(aes(seasonN,perc,color=composerName), show.legend = FALSE)
-```
-
-
-
-
-
-
-
-```{r}
-pcp %>%
-  group_by(seasonN) %>%
-  filter(seasonN == 74) %>%
-  ggplot() +
-  geom_histogram(aes(n,binwidth=1))
-```
-
-```{r}
-gini_comp %>%
-  arrange(gini)
-```
-
-```{r}
-
-pcp %>%
-  group_by(seasonN) %>%
-  filter(seasonN == 67) %>%
-  ggplot() +
-  geom_histogram(aes(n,binwidth=1))
-```
-
-
-
-
-```{r}
-comp_lorenz <- pcp %>%
-  select(seasonN,n) %>%
-  group_by(seasonN) %>%
-  nest() %>%
-  mutate(lc = map(data, function(x) Lc(x$n, plot = FALSE))) %>%
-  select(seasonN, lc) %>%
-  mutate(lct = map(lc, function(x) tibble(p = x$p,L = x$L))) %>%
-  unnest(lct) %>%
-  mutate(q = 1-p, M = 1-L)
-  
-  mutate(q = 1-x.p, M = 1-x.L)
-
-prova <- comp_lorenz %>%
-  mutate(lct = map(lc, function(x) tibble(p = x$p,L = x$L))) %>%
-  unnest(lct) %>%
-  mutate(q = 1-p, M = 1-L)
-    
-  select(composerName,term,estimate) %>%
-  pivot_wider(names_from = term,values_from = estimate) %>%
-
-pcp %>%
-  select(seasonN,composerName,n) %>%
-  group_by(seasonN) %>%
-  nest() %>%
-  mutate(lorenz = map(data, ~Lc(.x$n, plot = FALSE))) %>%
-
-tlcBuyer = tibble(p = lc$p, L = lc$L) %>% 
-  mutate(q = 1-p, M = 1-L)
-  
-lc = Lc(c(5,3,3,1,1,1))  
-plot(lc)  
-  
-  ## Load and attach income (and metadata) set from Ilocos, Philippines
-data(Ilocos)
-attach(Ilocos)
-## extract and rescale income for the provinces "Pangasinan" und "La Union"
-income.p <- income[province=="Pangasinan"]/10000
-income.u <- income[province=="La Union"]/10000
-caso <- c(1,1,1,1,5)
-Gini(c(1,1,1,1,1000))
-## compute the Lorenz curves
-Lc.p <- Lc(income.p)
-Lc.u <- Lc(income.u)
-Lc.caso <- Lc(caso)
-## it can be seen the the inequality in La Union is higher than in
-## Pangasinan because the respective Lorenz curve takes smaller values.
-plot(Lc.p)
-plot(Lc.caso)
-lines(Lc.u, col=2)
-## the picture becomes even clearer with generalized Lorenz curves
-plot(Lc.p, general=TRUE)
-lines(Lc.u, general=TRUE, col=2)
-## inequality measures emphasize these results, e.g. Atkinson's measure
-ineq(income.p, type="Atkinson")
-ineq(income.u, type="Atkinson")
-## or Theil's entropy measure
-ineq(income.p, type="Theil", parameter=0)
-ineq(income.u, type="Theil", parameter=0)
-  
-  
-```
-
-
-
-
 Come si sono evoluti i repertori dei conduttori?
 
 ```{r}
@@ -1016,22 +901,64 @@ slopes <- ccn_nested_models %>%
   filter(term == "seasonN") %>%
   mutate(adjusted.p.value = p.adjust(p.value))
 
-glance <- ccn_nested_models_glance %>%
-  unnest(glance)
-
-glance %>%
-  filter(null.deviance != 0) %>%
-  mutate(rsq = 1 - deviance / null.deviance) %>%
-  filter(rsq != 1) %>%
-  arrange(rsq)
-
 top_slopes <- slopes %>%
   filter(adjusted.p.value < 0.05)
 ```
 
+Prendo quelle che contengono almeno 3 osservazioni.
+
+```{r}
+over3 <- top_slopes %>%
+  unnest(data) %>%
+  mutate(n = n()) %>%
+  filter(n >= 3) %>%
+  distinct(conductorName,composerName,estimate)
+```
+
+Le plotto.
+
+```{r}
+ccn %>%
+  inner_join(over3) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(show.legend = FALSE) +
+  facet_wrap(~conductorName)
+```
+
+```{r}
+ccn %>%
+  inner_join(over10) %>%
+  filter(conductorName == "Stransky, Josef") %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(alpha = 1/3, show.legend = TRUE) +
+  geom_point(alpha = 1/3, show.legend = TRUE)
+```
 
 
+```{r}
+ccn %>%
+  inner_join(over10) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  filter(estimate < 0) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(show.legend = TRUE)
+```
 
+```{r}
+ccn %>%
+  anti_join(over10) %>%
+  filter(conductorName == "Stransky, Josef") %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(alpha = 1/3, show.legend = FALSE) +
+  geom_point(alpha = 1/3, show.legend = FALSE)
+```
+
+```{r}
+ccn %>%
+  anti_join(over10) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  arrange(estimate)
+```
 
 
 
@@ -1068,14 +995,80 @@ wagnerOverTwo <- slopes %>%
 
 ```
 
-Prendo quelle che riguardano almeno 15 osservazioni.
+Come si sono evoluti i repertori dei conduttori?
 
 ```{r}
-over10 <- top_slopes %>%
+ccn2 <- performances %>%
+  mutate(conductorName = if_else(is.na(conductorName),"NoName",conductorName)) %>%
+  count(seasonYear,conductorName,composerName) %>%
+  group_by(conductorName,seasonYear) %>%
+  mutate(totalT = sum(n)) %>%
+  rename(conductorT = n) %>%
+  ungroup()
+
+ccn2 <- ccn2 %>%
+  mutate(perc = conductorT / totalT) %>%
+  mutate(seasonYear_2 = seasonYear**2)
+
+ccn2_nested <- ccn2 %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+
+ccn2_func <- function(df) {
+  lm(perc ~ seasonYear + seasonYear_2, data = df)
+}
+
+ccn2_nested_models <- ccn2_nested %>%
+  mutate(models = map(data, ccn2_func))
+
+ccn2_nested_models_glance <- ccn2_nested_models %>%
+  mutate(glance = map(models,glance))
+
+ccn2_glance <- unnest(ccn2_nested_models_glance, glance, names_sep = "_")
+
+ccn2_glance %>%
+  filter(glance_adj.r.squared != 1) %>%
+  arrange(-glance_adj.r.squared)
+
+ccn2_glance_slopes <- ccn2_glance %>%
+  mutate(models = map(models, tidy)) %>% 
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonYear_2")
+
+
+
+  int <- ccn2_glance_slopes %>%
   unnest(data) %>%
-  count() %>%
-  filter(n >= 10)
+  mutate(n = n()) %>%
+  filter(n >= 8) %>%
+  filter(glance_adj.r.squared != 1 & glance_adj.r.squared > 0.75) %>%
+  arrange(estimate) %>%
+  distinct(conductorName, composerName)
+
+top_slopes <- slopes %>%
+  filter(adjusted.p.value < 0.05)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Stagioni fra 50 e 80.
 
@@ -1093,8 +1086,7 @@ seasons0_100 <- top_slopes %>%
 
 ```{r}
 ccn %>%
-  filter(seasonN <= 100) %>%
-  inner_join(seasons0_100) %>%
+  inner_join(int) %>%
   ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
   geom_point(show.legend = FALSE) +
   geom_line(show.legend = FALSE) +
@@ -1114,10 +1106,12 @@ ccn %>%
 
 ```{r}
 ccn %>%
-  filter(conductorName == "Walter, Bruno") %>%
+  anti_join(int) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
   ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
   geom_line(show.legend = FALSE) +
-  geom_point(show.legend = FALSE)
+  geom_point(show.legend = FALSE) +
+  stat_smooth(se=F, method='lm', formula=y~poly(x,2),show.legend = FALSE)
 ```
 
 
@@ -4006,25 +4000,27 @@ Globalmente, considerando i lavori rappresentati, sulla base della percentuale a
 ```{r}
 performances %>%
   mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
-  group_by(month) %>%
-  mutate(totalM = n()) %>%
-  group_by(month,composerName) %>%
+  group_by(composerName) %>%
   mutate(totalC = n()) %>%
-  mutate(percent = totalC / totalM) %>%
-  filter(percent > 0.01) %>%
+  group_by(composerName,month,monthid) %>%
+  mutate(totalM = n()) %>%
+  mutate(percent = totalM / totalC) %>%
+  distinct(composerName,month,percent) %>%
+  inner_join(over40) %>%
   ggplot() +
-    geom_tile(aes(x=reorder(month,monthid),y=composerName,fill=percent))
+    geom_tile(aes(x=reorder(month,monthid),y=composerName,fill=percent)) +
+    scale_fill_viridis_c(option = "magma")
 ```
 
 ```{r}
 performances %>%
   mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
-  group_by(month) %>%
-  mutate(totalM = n()) %>%
-  group_by(month,composerName) %>%
+  group_by(composerName) %>%
   mutate(totalC = n()) %>%
-  mutate(percent = totalC / totalM) %>%
-  filter(composerName == "Tchaikovsky, Pyotr Ilyich") %>%
+  group_by(composerName, month) %>%
+  mutate(totalM = n()) %>%
+  mutate(percent = totalM / totalC) %>%
+  filter(composerName == "Musorgsky, Modest") %>%
   ggplot() +
   geom_bar(aes(x=month,fill=eventType))
 ```

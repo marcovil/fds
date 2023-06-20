@@ -66,6 +66,7 @@ Come evolve negli anni (nel lungo periodo) il repertorio dell'orchestra? Ci sono
 ```{r}
 ggplot(pcp,aes(seasonYear, perc, color = composerName)) +
   geom_line(alpha = 1/4, show.legend = FALSE) +
+  geom_vline(aes(xintercept = 1909, color = "red"), show.legend = FALSE) +
   labs(
     x = "stagione",
     y = "performance compositore / performance stagione (%)",
@@ -167,10 +168,19 @@ ggplot() +
   theme_light()
 ```
 
-## Slide with R Output
+## Compositori nel tempo {.flexbox .vcenter}
 
-```{r cars, echo = TRUE}
-summary(cars)
+```{r}
+pcp %>%
+  filter(seasonYear >= 1905 & seasonYear <= 1915) %>%
+  ggplot() +
+  geom_boxplot(aes(seasonYear,perc,group = seasonYear), outlier.shape = NA) +
+  coord_cartesian(ylim = c(0.0,0.10))  +
+  labs(
+    x = "stagione",
+    y = "numero di compositori",
+  ) +
+  theme_light()
 ```
 
 ## Slide with Plot
