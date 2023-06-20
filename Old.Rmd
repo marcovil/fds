@@ -1085,3 +1085,221 @@ performances %>%
   geom_point(aes(year,perc,color=conductorName), show.legend = FALSE) +
   coord_cartesian(ylim = c(0.0,0.3))
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+George Gershwin.
+
+```{r}
+cc %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  mutate(percent = totalC / totalM) %>%
+  filter(composerName == "Gershwin,  George")
+  
+cc %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  mutate(percent = totalC / totalM) %>%
+  filter(composerName == "Gershwin,  George") %>%
+  ggplot() +
+    geom_point(aes(x=reorder(month,monthid),y=percent))
+```
+
+Beethoven.
+
+```{r}
+cc %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  mutate(percent = totalC / totalM) %>%
+  filter(composerName == "Beethoven,  Ludwig  van") %>%
+  ggplot() +
+    geom_point(aes(x=reorder(month,monthid),y=percent))
+
+```
+
+Inizio e fine delle subscription season.
+
+```{r}
+programsT %>%
+  filter(eventType == "Subscription Season") %>%
+  group_by(season) %>%
+  mutate(
+    start = min(Date),
+    end = max(Date)
+  ) %>%
+  ggplot() +
+  geom_point(aes(x=season,y=month(start), color="red")) +
+  geom_point(aes(x=season,y=month(end), color="blue"))
+
+```
+
+
+Concentrandomi sulla subscription season.
+
+```{r}
+
+  
+ccseason %>%
+  filter(eventType == "Subscription Season") %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  mutate(percent = totalC / totalM) %>%
+  filter(percent > 0.01) %>%
+  ggplot() +
+    geom_tile(aes(x=reorder(month,monthid),y=composerName,fill=percent))
+
+```
+
+Beethoven.
+
+```{r}
+ccseason %>%
+  filter(eventType == "Subscription Season") %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  mutate(percent = totalC / totalM) %>%
+  filter(composerName == "Beethoven,  Ludwig  van") %>%
+  ggplot() +
+    geom_point(aes(x=reorder(month,monthid),y=percent))
+```
+
+```{r}
+ccseason %>%
+  filter(eventType == "Subscription Season") %>%
+  filter(as.integer(month(Date)) == 8) %>%
+  filter(composerName == "Beethoven,  Ludwig  van") %>%
+  ggplot() +
+  geom_point(aes(x=Date,y=))
+```
+
+Subscription Season con normalizzazione.
+
+```{r}
+ccseason %>%
+  filter(eventType == "Subscription Season") %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  ungroup() %>%
+  group_by(month) %>%
+  mutate(
+    normalized = (totalC - min(totalC)) / (max(totalC) - min(totalC))
+  ) %>%
+  distinct(composerName,month,monthid,normalized) %>%
+  filter(normalized > 0.2) %>%
+  ggplot() +
+    geom_tile(aes(x=reorder(month,monthid),y=composerName,fill=normalized))
+```
+
+Globale con normalizzazione.
+
+```{r}
+ccseason %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  ungroup() %>%
+  group_by(month) %>%
+  mutate(
+    normalized = (totalC - min(totalC)) / (max(totalC) - min(totalC))
+  ) %>%
+  distinct(composerName,month,monthid,normalized) %>%
+  filter(normalized > 0.2) %>%
+  ggplot() +
+    geom_tile(aes(x=reorder(month,monthid),y=composerName,fill=normalized))
+```
+
+Diverso da subscription con normalizzazione.
+
+```{r}
+
+ccseason %>%
+  filter(eventType != "Subscription Season") %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  ungroup() %>%
+  group_by(month) %>%
+  mutate(
+    normalized = (totalC - min(totalC)) / (max(totalC) - min(totalC))
+  ) %>%
+  distinct(composerName,month,monthid,normalized) %>%
+  filter(normalized > 0.2) %>%
+  ggplot() +
+    geom_tile(aes(x=reorder(month,monthid),y=composerName,fill=normalized))
+
+```
+
+
+```{r}
+ccseason %>%
+  filter(eventType == "Subscription Season") %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(month) %>%
+  mutate(totalM = n()) %>%
+  group_by(composerName,add=TRUE) %>%
+  mutate(totalC = n()) %>%
+  filter(monthid == 5) %>%
+  distinct(composerName,totalC) %>%
+  arrange(-totalC)
+```
+
+```{r}
+ccseason %>%
+  filter(eventType == "Subscription Season") %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  filter(monthid == 7)
+```
+
+
+
+
+```{r}
+ccseason %>%
+  filter(eventType == "Subscription Season") %>%
+  mutate(Year = year(Date)) %>%
+group_by(Year,composerName) %>%
+  count() %>%
+ggplot(aes(Year, n, color = composerName)) +
+  geom_line(alpha = 1/2, show.legend = FALSE)
+```
+
+
+
+

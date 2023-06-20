@@ -12,25 +12,29 @@ output:
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-## R Markdown
+```{r, warning=FALSE, message=FALSE}
+library(tidyr)
+library(dplyr)
+library(jsonlite)
+library(purrr)
+library(stringr)
+library(lubridate)
+library(modelr)
+library(broom)
+library(tibble)
+library(ggplot2)
+library(mgcv)
+library(ineq)
 
-This is an R Markdown presentation. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+performances <- readRDS("perf.RDS")
+pcp <- readRDS("pcp.RDS")
+pcp_models_simp <- readRDS("pcp_models_simp.RDS")
+pcp_glance <- readRDS("pcp_glance.RDS")
+pcp_resids <- readRDS("pcp_resids.RDS")
+before_1909 <- readRDS("before_1909")
+```
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document.
-
-Ciao sono Marco.
-
-Ciao
-
-## Slide with Bullets
-
-- Bullet 1
-- Bullet 2
-- Bullet 3
-ciao sono marco
-ciao ciao
-
-## Dataset usato
+## Dataset usato {.flexbox .vcenter}
 
 New York Philharmonic, pubblicato su https://github.com/nyphilarchive/PerformanceHistory e disponibile in XML o JSON (che ho usato).
 
@@ -55,24 +59,113 @@ Il dataset contiene sostanzialmente il programma dell'attività dell'orchestra, 
   ]
 ```
 
-## Compositori nel tempo
+## Compositori nel tempo {.flexbox .vcenter}
 
-Come evolve negli anni il repertorio dell'orchestra? Ci sono compositori per cui cresce o diminuisce il numero di rappresentazioni?
+Come evolve negli anni (nel lungo periodo) il repertorio dell'orchestra? Ci sono compositori per cui cresce o diminuisce il numero di rappresentazioni?
 
-Per farlo ho calcolato per ogni stagione la percentuale di performance di ogni compositore rappresentato sul totale di performance della stagione. Sono partito da questo plot:
+```{r}
+ggplot(pcp,aes(seasonYear, perc, color = composerName)) +
+  geom_line(alpha = 1/4, show.legend = FALSE) +
+  labs(
+    x = "stagione",
+    y = "performance compositore / performance stagione (%)",
+  ) +
+  theme_light()
+```
 
-PLOT
+## Compositori nel tempo {.flexbox .vcenter}
+Componenti quadratiche positive (Dvorak, Strauss) e negative (Ravel, Prokofiev).
 
-## Compositori nel tempo - 
+```{r, message=FALSE}
+pcp %>%
+  filter(composerName == "Dvorak, Antonín" | composerName == "Ravel, Maurice" |
+           composerName == "Strauss, Richard" | composerName == "Prokofiev, Sergei") %>%
+ggplot(aes(seasonYear, perc)) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE) +
+  geom_smooth() +
+  labs(
+    x = "stagione",
+    y = "performance compositore / performance stagione (%)",
+  ) +
+  facet_wrap(~composerName) +
+  theme_light()
+```
 
-## Distribuzione 
+## Compositori nel tempo {.flexbox .vcenter}
+Alcuni modelli che hanno un buon fit.
 
+```{r, message=FALSE}
+pcp %>%
+  filter(composerName == "Chopin, Frédéric" | composerName == "Bruch, Max" |
+           composerName == "Weber, Carl Maria Von" | composerName == "Gluck, Christoph Willibald") %>%
+ggplot(aes(seasonYear, perc)) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE) +
+  geom_smooth() +
+  labs(
+    x = "stagione",
+    y = "performance compositore / performance stagione (%)",
+  ) +
+  facet_wrap(~composerName) +
+  theme_light()
+```
 
-## Repertori dei conduttori
+## Compositori nel tempo {.flexbox .vcenter}
+Compositori rappresentati con una certa continuità prima della stagione 1909-1910.
 
-Come evolve negli anni il repertorio dei compositori? Ci sono compositori per cui cresce o diminuisce il numero di rappresentazioni?
+```{r, message=FALSE}
+ggplot(
+  pcp %>%
+  inner_join(before_1909)
+) +
+  geom_point(aes(x = seasonYear, y = perc),alpha = 1/4) +
+  geom_vline(aes(xintercept = 1909, color = "red"), show.legend = FALSE) +
+  facet_wrap(~composerName) +
+  labs(
+    x = NULL,
+    y = NULL,
+  ) +
+  scale_x_continuous(labels = NULL) +
+  theme_light()
+```
 
+## Compositori nel tempo {.flexbox .vcenter}
+Le stagioni prima del 1909 sono molto più "eque" nella divisione delle performance fra diversi compositori
 
+```{r}
+pcp %>%
+  select(seasonYear,n) %>%
+  group_by(seasonYear) %>%
+  mutate(gini = Gini(n)) %>%
+  distinct(seasonYear,gini) %>%
+ggplot() +
+    geom_vline(aes(xintercept = 1909, color = "red"), show.legend = FALSE) +
+    geom_line(aes(seasonYear,gini)) +
+  labs(
+    x = "stagione",
+    y = "indice Gini",
+  ) +
+  theme_light()
+```
+
+## Compositori nel tempo {.flexbox .vcenter}
+Questo nonostante aumenti il numero di compositori.
+
+```{r}
+performances %>%
+  group_by(seasonYear) %>%
+  mutate(composers = n_distinct(composerName)) %>%
+  ungroup() %>%
+ggplot() +
+    geom_vline(aes(xintercept = 1909, color = "red"), show.legend = FALSE) +
+    geom_line(aes(seasonYear,composers)) +
+  labs(
+    x = "stagione",
+    y = "numero di compositori",
+  ) +
+  theme_light()
+```
 
 ## Slide with R Output
 
