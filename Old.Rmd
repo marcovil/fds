@@ -5,6 +5,1102 @@ date: "2023-06-14"
 output: html_document
 ---
 
+
+
+ccn2 %>%
+  inner_join(good %>%
+               inner_join(down)
+             ) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+
+  ggplot() +
+  geom_point(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
+  facet_wrap(~conductorName)
+
+ccn2_nested_models <- ccn2_nested %>%
+  mutate(models = map(data, ccn2_func))
+
+ccn2_nested_models_glance <- ccn2_nested_models %>%
+  mutate(glance = map(models,glance))
+
+ccn2_glance <- unnest(ccn2_nested_models_glance, glance, names_sep = "_")
+
+ccn2_glance %>%
+  filter(glance_adj.r.squared != 1) %>%
+  arrange(-glance_adj.r.squared)
+
+ccn2_glance_slopes <- ccn2_glance %>%
+  mutate(models = map(models, tidy)) %>% 
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonYear_2")
+
+ccn2_glance <- ccn2_glance %>%
+  mutate(data = map2(data, models, add_residuals))
+
+ccn2_glance %>%
+  unnest(data) %>%
+  filter(conductorName == "Walter, Bruno") %>%
+  ggplot(aes(seasonYear,resid,color=composerName)) +
+  geom_line(show.legend = FALSE)
+
+ccn2 %>%
+  filter(conductorName == "Walter, Bruno") %>%
+  ggplot(aes(seasonYear,perc,color=composerName)) +
+  geom_line(show.legend = FALSE)
+
+  int <- ccn2_glance_slopes %>%
+  unnest(data) %>%
+  mutate(n = n()) %>%
+  filter(n >= 8) %>%
+  filter(glance_adj.r.squared != 1 & glance_adj.r.squared > 0.75) %>%
+  arrange(estimate) %>%
+  distinct(conductorName, composerName, glance_adj.r.squared)
+
+top_slopes <- slopes %>%
+  filter(adjusted.p.value < 0.05)
+```
+
+```{r} 
+ccn2 %>%
+  filter(composerName == "Gershwin, George") %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  ggplot(aes(seasonYear,perc)) +
+  geom_point()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Come si sono evoluti i repertori dei conduttori?
+
+```{r}
+ccn_inv <- performances %>%
+  mutate(conductorName = if_else(is.na(conductorName),"NoName",conductorName)) %>%
+  count(seasonYear,composerName,conductorName) %>%
+  group_by(seasonYear,composerName) %>%
+  mutate(composerYear = sum(n)) %>%
+  rename(conductorComposerYear = n) %>%
+  ungroup()
+
+ccn_inv_nested <- ccn_inv %>%
+  group_by(composerName,conductorName) %>%
+  nest()
+
+ccn_inv_nested_models <- ccn_inv_nested %>%
+  mutate(models = map(data, ~ glm(cbind(conductorComposerYear, composerYear) ~ seasonYear, ., family = "binomial")))
+
+ccn_inv_nested_models_glance <- ccn_inv_nested_models %>%
+  mutate(glance = map(models,glance))
+
+good <- ccn_inv_nested_models_glance %>%
+  unnest(glance) %>%
+  select(composerName,conductorName,null.deviance,deviance) %>%
+  filter(null.deviance > 0) %>%
+  mutate(rsq = 1 - (deviance / null.deviance)) %>%
+  filter(rsq >= 0.7 & rsq < 1) %>%
+  arrange(-rsq) %>%
+  select(composerName,conductorName)
+
+slopes <- ccn_inv_nested_models %>%
+  mutate(models = map(models, tidy)) %>% 
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonYear") %>%
+  mutate(adjusted.p.value = p.adjust(p.value)) %>%
+  filter(conductorName != "NoName") %>%
+  filter(adjusted.p.value < 0.05) %>%
+  unnest(data) %>%
+  mutate(n = n()) %>%
+  filter(n >= 4)
+
+slopes %>%
+  inner_join(good)
+
+up_slopes <- slopes %>%
+  filter(estimate > 0) %>%
+  arrange(-estimate)
+
+down_slopes <- slopes %>%
+  filter(estimate < 0) %>%
+  arrange(estimate)
+```
+
+
+
+```{r}
+ccn_inv %>%
+  inner_join(slopes %>%
+  inner_join(good)) %>%
+  ggplot(aes(seasonYear, conductorComposerYear / composerYear, color = conductorName)) +
+  geom_line() +
+  facet_wrap(~composerName)
+```
+
+```{r}
+ccn_inv %>%
+  inner_join(up_slopes) %>%
+  ggplot(aes(seasonYear, conductorComposerYear / composerYear, color = conductorName)) +
+  geom_point() +
+  facet_wrap(~composerName)
+```
+
+```{r}
+ccn_inv %>%
+  inner_join(up_slopes) %>%
+  filter(composerName == "Wagner, Richard") %>%
+  ggplot(aes(seasonYear, conductorComposerYear / composerYear, color = conductorName)) +
+  geom_point() +
+  geom_line()
+```
+
+
+```{r}
+ccn_inv %>%
+  inner_join(up_slopes) %>%
+  filter(composerName == "Beethoven, Ludwig van") %>%
+  ggplot(aes(seasonYear, conductorComposerYear / composerYear, color = conductorName)) +
+  geom_point() +
+  geom_line()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+Compositori che sono particolarmente rappresentati in un certo mese.
+Globalmente, considerando i lavori rappresentati, sulla base della percentuale all'interno del mese.
+
+```{r}
+performances %>%
+  filter(season > 1909) %>%
+  mutate(month = format(Date, "%B"), monthid = as.integer(month(Date))) %>%
+  group_by(composerName) %>%
+  mutate(totalC = n()) %>%
+  group_by(composerName,month,monthid) %>%
+  mutate(totalM = n()) %>%
+  mutate(percent = totalM / totalC) %>%
+  distinct(composerName,month,percent) %>%
+  filter(composerName == "Gershwin, George")
+  inner_join(over40) %>%
+  ggplot() +
+    geom_tile(aes(x=reorder(month,monthid),y=composerName,fill=percent)) +
+    scale_fill_viridis_c(option = "magma")
+```
+
+```{r}
+# mesi
+perf_data <- performances %>%
+  filter(season > 1909) %>%
+  mutate(month = month(Date, label = TRUE)) %>%
+  group_by(composerName,year,month) %>%
+  mutate(monthP_Y = n()) %>%
+  group_by(composerName,year) %>%
+  mutate(yearP = n()) %>%
+  mutate(perc = monthP_Y / yearP) %>%
+  group_by(composerName) %>%
+  filter(composerName == "Gershwin, George") %>%
+  distinct(seasonYear,month,perc) %>%
+  ungroup()
+
+
+
+  mutate(months = n_distinct(month)) %>%
+  filter(months == 12) %>%
+  select(composerName,conductorName,year,month,perc) %>%
+    ggplot() +
+    geom_tile(aes(x=month,y=composerName,fill=perc)) +
+    scale_fill_viridis_c(option = "magma")
+  
+  
+
+regs <- perf_data %>%
+  mutate(
+    fit = map(data, ~ lm(perc ~ month, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance),
+    augmented = map(fit, augment)
+  )
+
+mod <- lm(perc ~ month, data = perf_data)
+
+grid <- perf_data %>% 
+  add_predictions(mod, "percpred") %>%
+  add_residuals(mod)
+
+
+
+daily %>%
+  arrange(-resid)
+
+regs %>%
+  unnest(glanced) %>%
+  unnest(tidied, names_sep = "_") %>%
+  arrange(-r.squared,-tidied_estimate)
+```
+
+```{r}
+performances %>%
+  filter(season > 1909) %>%
+  mutate(month = month(Date, label = TRUE)) %>%
+  group_by(composerName,year,month) %>%
+  mutate(monthP_Y = n()) %>%
+  group_by(composerName,year) %>%
+  mutate(yearP = n()) %>%
+  group_by(composerName) %>%
+  mutate(months = n_distinct(month)) %>%
+  filter(months == 12) %>%
+  select(eventType,composerName,Date,conductorName,year,month,monthP_Y,yearP) %>%
+  filter(composerName == "Musorgsky, Modest") %>%
+  filter(conductorName == "DePreist, James") %>%
+  ggplot() +
+  geom_point(aes(year, monthP_Y))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+ccn <- performances %>%
+  mutate(conductorName = if_else(is.na(conductorName),"NoName",conductorName)) %>%
+  count(seasonN,conductorName,composerName) %>%
+  group_by(conductorName,seasonN) %>%
+  mutate(totalT = sum(n)) %>%
+  rename(conductorT = n) %>%
+  ungroup()
+
+ccn_nested <- ccn %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+
+ccn_nested_models <- ccn_nested %>%
+  mutate(models = map(data, ~ glm(cbind(conductorT, totalT) ~ seasonN, ., family = "binomial")))
+
+ccn_nested_models_glance <- ccn_nested_models %>%
+  mutate(glance = map(models,glance))
+
+slopes <- ccn_nested_models %>%
+  mutate(models = map(models, tidy)) %>% 
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonN") %>%
+  mutate(adjusted.p.value = p.adjust(p.value))
+
+top_slopes <- slopes %>%
+  filter(adjusted.p.value < 0.05)
+```
+
+Prendo quelle che contengono almeno5 osservazioni.
+
+```{r}
+over5 <- top_slopes %>%
+  unnest(data) %>%
+  mutate(n = n()) %>%
+  filter(n >= 5) %>%
+  distinct(conductorName,composerName,estimate)
+```
+
+Le plotto.
+
+```{r}
+ccn %>%
+  inner_join(over5) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(show.legend = FALSE) +
+  facet_wrap(~conductorName)
+```
+
+```{r}
+ccn %>%
+  inner_join(over5) %>%
+  filter(conductorName == "Walter, Bruno") %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(alpha = 1/3, show.legend = TRUE) +
+  geom_point(alpha = 1/3, show.legend = TRUE)
+  ```
+
+
+```{r}
+ccn %>%
+  inner_join(over10) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  filter(estimate < 0) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(show.legend = TRUE)
+```
+
+```{r}
+ccn %>%
+  anti_join(over10) %>%
+  filter(conductorName == "Stransky, Josef") %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(alpha = 1/3, show.legend = FALSE) +
+  geom_point(alpha = 1/3, show.legend = FALSE)
+```
+
+```{r}
+ccn %>%
+  anti_join(over10) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  arrange(estimate)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+
+  
+  performances %>%
+  filter(seasonYear > 1909) %>%
+  filter(composerName == "Gershwin, George") %>%
+  mutate(month = month(Date)) %>%
+  ggplot() +
+  geom_bar(aes(month))
+
+monthly <-  performances %>%
+  filter(seasonYear > 1909) %>%
+  filter(composerName == "Wagner, Richard") %>%
+  mutate(month = month(Date)) %>%
+  group_by(year,month) %>%
+  summarise(n = n())
+
+mod <- lm(n ~ month, data = monthly)
+
+monthly %>%
+  add_predictions(mod, "n_pred") %>%
+  add_residuals(mod) %>%
+  ggplot() +
+  geom_point(aes(year,month,color=resid))
+
+  group_by(Date) %>%
+  summarise(n = n())
+daily
+
+ggplot(daily, aes(Date, n)) + 
+  geom_line()
+
+daily <- daily %>% 
+  mutate(month = month(Date, label = TRUE))
+ggplot(daily, aes(month, n)) + 
+  geom_boxplot()
+
+mod <- lm(n ~ month, data = daily)
+
+grid <- daily %>% 
+  data_grid(month) %>% 
+  add_predictions(mod, "n")
+
+ggplot(daily, aes(month, n)) + 
+  geom_boxplot() +
+  geom_point(data = grid, colour = "red", size = 4)
+
+daily <- daily %>% 
+  add_residuals(mod)
+daily %>% 
+  ggplot(aes(Date, resid)) + 
+  geom_ref_line(h = 0) + 
+  geom_line() +
+  geom_smooth()
+
+daily %>%
+  filter(resid > 4) %>%
+ggplot(aes(Date, resid, colour = month)) + 
+  geom_ref_line(h = 0) + 
+  geom_point()
+
+performances %>%
+  filter(seasonYear > 1909) %>%
+  filter(composerName == "Gershwin, George")
+
+
+```
+
+
+```{r}
+conductors <- tibble(conductorName = c("Seidl, Anton", "Paur, Emil", "Damrosch, Walter", "Safonoff, Wassily", "Mahler, Gustav", "Stransky, Josef", "Mengelberg, Willem", "Toscanini, Arturo"))
+
+composers <- tibble(composerName = c("Wagner, Richard"))
+
+ccn %>%
+  inner_join(
+    slopes %>%
+    inner_join(wagnerOverTwo)
+    ) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color = composerName)) +
+  geom_line(show.legend = TRUE) +
+  facet_wrap(~conductorName)
+
+ccn %>%
+  inner_join(
+    slopes %>%
+      inner_join(conductors) %>%
+    inner_join(composers)
+    ) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color = composerName)) +
+  geom_line(show.legend = TRUE) +
+  facet_wrap(~conductorName)
+
+wagnerOverTwo <- slopes %>%
+  unnest(data) %>%
+  filter(composerName == "Wagner, Richard") %>%
+  count() %>%
+  filter(n >= 3)
+
+
+```
+
+Come si sono evoluti i repertori dei conduttori?
+
+```{r}
+ccn2 <- performances %>%
+  mutate(conductorName = if_else(is.na(conductorName),"NoName",conductorName)) %>%
+  count(seasonYear,conductorName,composerName) %>%
+  group_by(conductorName,seasonYear) %>%
+  mutate(totalT = sum(n)) %>%
+  rename(conductorT = n) %>%
+  ungroup()
+
+ccn2 <- ccn2 %>%
+  mutate(perc = conductorT / totalT) %>%
+  mutate(seasonYear_2 = seasonYear**2)
+
+ccn2_nested <- ccn2 %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+
+ccn2_func <- function(df) {
+  lm(perc ~ seasonYear + seasonYear_2, data = df)
+}
+
+ccn2_nested_models <- ccn2_nested %>%
+  mutate(models = map(data, ccn2_func))
+
+ccn2_nested_models_glance <- ccn2_nested_models %>%
+  mutate(glance = map(models,glance))
+
+ccn2_glance <- unnest(ccn2_nested_models_glance, glance, names_sep = "_")
+
+ccn2_glance %>%
+  filter(glance_adj.r.squared != 1) %>%
+  arrange(-glance_adj.r.squared)
+
+ccn2_glance_slopes <- ccn2_glance %>%
+  mutate(models = map(models, tidy)) %>% 
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonYear_2")
+
+ccn2_glance <- ccn2_glance %>%
+  mutate(data = map2(data, models, add_residuals))
+
+ccn2_glance %>%
+  unnest(data) %>%
+  filter(conductorName == "Walter, Bruno") %>%
+  ggplot(aes(seasonYear,resid,color=composerName)) +
+  geom_line(show.legend = FALSE)
+
+ccn2 %>%
+  filter(conductorName == "Walter, Bruno") %>%
+  ggplot(aes(seasonYear,perc,color=composerName)) +
+  geom_line(show.legend = FALSE)
+
+  int <- ccn2_glance_slopes %>%
+  unnest(data) %>%
+  mutate(n = n()) %>%
+  filter(n >= 8) %>%
+  filter(glance_adj.r.squared != 1 & glance_adj.r.squared > 0.75) %>%
+  arrange(estimate) %>%
+  distinct(conductorName, composerName, glance_adj.r.squared)
+
+top_slopes <- slopes %>%
+  filter(adjusted.p.value < 0.05)
+```
+
+```{r}
+ccn2 %>%
+  inner_join(int) %>%
+  ggplot(aes(seasonYear, conductorT / totalT, color=composerName)) +
+  geom_point(show.legend = FALSE) +
+  geom_line(show.legend = FALSE) +
+  facet_wrap(~conductorName)
+```
+
+
+
+```{r}
+ccn_inv <- performances %>%
+  mutate(conductorName = if_else(is.na(conductorName),"NoName",conductorName)) %>%
+  count(seasonN,composerName,conductorName) %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(totalT = sum(n)) %>%
+  rename(conductorT = n) %>%
+  ungroup()
+
+ccn_inv_nested <- ccn_inv %>%
+  group_by(composerName,conductorName) %>%
+  nest()
+
+ccn_inv_nested_models <- ccn_inv_nested %>%
+  mutate(models = map(data, ~ glm(cbind(conductorT, totalT) ~ seasonN, ., family = "binomial")))
+
+ccn_inv_nested_models_glance <- ccn_inv_nested_models %>%
+  mutate(glance = map(models,glance))
+
+ccn_inv_slopes <- ccn_inv_nested_models %>%
+  mutate(models = map(models, tidy)) %>% 
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonN") %>%
+  mutate(adjusted.p.value = p.adjust(p.value))
+
+ccn_inv_top_slopes <- ccn_inv_slopes %>%
+  filter(adjusted.p.value < 0.05)
+
+inv <- ccn_inv_top_slopes %>%
+  unnest(data) %>%
+  mutate(n = n()) %>%
+  filter(n >= 8) %>%
+  filter(estimate < 0) %>%
+  arrange(estimate)
+```
+
+```{r}
+ccn_inv %>%
+  inner_join(inv) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color = composerName)) +
+  geom_point(show.legend = FALSE) +
+  geom_line(show.legend = FALSE) +
+  facet_wrap(~conductorName)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Stagioni fra 50 e 80.
+
+```{r}
+seasons0_100 <- top_slopes %>%
+  unnest(data) %>%
+  filter(conductorName != "NoName") %>%
+
+  mutate(count = n()) %>%
+  filter(count >= 5) %>%
+  arrange(estimate) %>%
+  distinct(conductorName,composerName,estimate)
+```
+
+
+```{r}
+ccn %>%
+  inner_join(int) %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_point(show.legend = FALSE) +
+  geom_line(show.legend = FALSE) +
+  facet_wrap(~conductorName)
+```
+
+
+
+```{r}
+ccn %>%
+  filter(conductorName == "Schelling, Ernest") %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE)
+```
+
+
+```{r}
+ccn %>%
+  anti_join(int) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  ggplot(aes(seasonN, conductorT / totalT, color=composerName)) +
+  geom_line(show.legend = FALSE) +
+  geom_point(show.legend = FALSE) +
+  stat_smooth(se=F, method='lm', formula=y~poly(x,2),show.legend = FALSE)
+```
+
+
+```{r}
+ccn %>%
+  filter(composerName == "Wagner, Richard") %>%
+  ggplot() +
+  geom_histogram(aes(seasonN,fill=conductorName,binwidth=1), show.legend = FALSE)
+```
+
+
+
+Gini conduttori.
+
+```{r}
+gini_cond <- performances %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(conductorPerformances = n()) %>%
+  group_by(seasonN) %>%
+  mutate(seasonPerformances = n()) %>%
+  ungroup() %>%
+  distinct(seasonN,conductorName,conductorPerformances,seasonPerformances) %>%
+  select(seasonN,conductorPerformances) %>%
+  group_by(seasonN) %>%
+  mutate(gini = Gini(conductorPerformances)) %>%
+  distinct(seasonN,gini)
+  
+ggplot(gini_cond) +
+    geom_line(aes(seasonN,gini))
+```
+
+```{r}
+ccn %>%
+  mutate(perc = conductorT / totalT) %>%
+  group_by(composerName) %>%
+  mutate(seasons = n_distinct(seasonN)) 
+  mutate(mod = lm(perc ~ conductorName + seasonN))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Come si sono evoluti i repertori dei conduttori?
+
+```{r}
+ccn <- performances %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  group_by(seasonN,conductorName,composerName) %>%
+  mutate(compSeason = n()) %>%
+  group_by(seasonN,conductorName) %>%
+  mutate(condSeason = n()) %>%
+  ungroup()
+
+ccn_rid <- ccn %>%
+  distinct(seasonN,conductorName,composerName,compSeason,condSeason)
+
+ccn_rid_n <- ccn_rid %>%
+  group_by(conductorName,composerName) %>%
+  nest()
+
+ccn_rid_n_models <- ccn_rid_n %>%
+  mutate(models = map(data, ~ glm(cbind(compSeason, condSeason) ~ seasonN, ., family = "binomial")))
+
+slopes <- ccn_rid_n_models %>%
+  mutate(models = map(models, tidy)) %>% 
+  unnest(cols = c(models)) %>%
+  filter(term == "seasonN") %>%
+  mutate(adjusted.p.value = p.adjust(p.value))
+
+goodslopes <- slopes %>%
+  filter(adjusted.p.value < 0.05)
+```
+
+Costruisco un elenco di direttori - compositori (tempo fra prima e ultima rappresentazione di quel compositore da parte di quel direttore).
+
+```{r}
+spans <- performances %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  group_by(conductorName,composerName) %>%
+  mutate(
+    min = min(seasonN),
+    max = max(seasonN),
+    span = max - min + 1
+  ) %>%
+  distinct(conductorName,composerName,span)
+```
+
+Seleziono alcuni modelli che hanno pendenza positiva. Per farlo mi concentro su quelli che hanno uno span di più di 10 anni.
+
+```{r}
+totalup <- slopes %>%
+  filter(estimate > 0)
+
+upslopes <- slopes %>%
+  filter(adjusted.p.value < 0.05) %>%
+  filter(estimate > 0) %>%
+  inner_join(spans) %>%
+  filter(span > 10) %>%
+  arrange(-span) %>%
+  head(20)
+
+ccn_rid %>%
+  inner_join(upslopes) %>%
+  ggplot(aes(seasonN,compSeason / condSeason,color=composerName)) +
+  geom_line() +
+  facet_wrap(~conductorName)
+```
+
+Similmente con quelli che hanno pendenza negativa.
+
+```{r}
+totaldown <- slopes %>%
+  filter(estimate < 0)
+
+downslopes <- slopes %>%
+  filter(adjusted.p.value < 0.05) %>%
+  filter(estimate < 0) %>%
+  inner_join(spans) %>%
+  filter(span > 10) %>%
+  arrange(-span) %>%
+  head(20)
+
+ccn_rid %>%
+  inner_join(downslopes) %>%
+  ggplot(aes(seasonN,compSeason / condSeason,color=composerName)) +
+  geom_line() +
+  facet_wrap(~conductorName)
+```
+
+Bernstein.
+
+```{r}
+ccn_rid %>%
+  inner_join(upslopes) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  ggplot(aes(seasonN,compSeason / condSeason,color = composerName)) +
+  geom_line(show.legend = FALSE) +
+  geom_point() +
+  facet_wrap(~composerName)
+```
+
+Bernstein downslopes.
+
+```{r}
+ccn_rid %>%
+  inner_join(downslopes) %>%
+  filter(conductorName == "Bernstein, Leonard") %>%
+  ggplot(aes(seasonN,compSeason / condSeason,color = composerName)) +
+  geom_line(show.legend = FALSE) +
+  geom_point() +
+  facet_wrap(~composerName)
+```
+
+Maazel.
+
+```{r}
+ccn_rid %>%
+  inner_join(downslopes) %>%
+  filter(conductorName == "Maazel, Lorin") %>%
+  ggplot(aes(seasonN,compSeason / condSeason,color = composerName)) +
+  geom_line(show.legend = FALSE) +
+  geom_point() +
+  facet_wrap(~composerName)
+```
+
+
+```{r}
+ccn_rid %>%
+  filter(conductorName == "Mahler, Gustav") %>%
+  filter(composerName == "Wagner, Richard") %>%
+  ggplot(aes(seasonN,compSeason / condSeason,color = composerName)) +
+  geom_line(show.legend = FALSE) +
+  geom_point() +
+  facet_wrap(~composerName)
+```
+
+
+
+
+```{r}
+meancarr <- ccn %>%
+  mutate(seasonN_2 = seasonN**2) %>%
+  group_by(conductorName) %>%
+  mutate(seasons = n_distinct(seasonN)) %>%
+  filter(seasons > 1) %>%
+  group_by(conductorName,seasonN) %>%
+  mutate(median = median(conductorT/totalT)) %>%
+  group_by(conductorName) %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~ lm(median ~ seasonN + seasonN_2, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance),
+    augmented = map(fit, augment)
+  ) %>%
+  unnest(glanced) %>%
+  filter(r.squared < 1) %>%
+  arrange(-r.squared) %>%
+  head(10)
+```
+
+```{r}
+ccn %>%
+  inner_join(meancarr) %>%
+  ggplot() +
+  geom_point(aes(seasonN,median))
+```
+
+
+
+
+
+```{r}
+composersf <- function(df) {
+  lm(composers ~ seasonYear + seasonYear_2, data = df)
+}
+
+composerNumber <- performances %>%
+  filter(!is.na(conductorName)) %>%
+  filter(conductorName != "Not conducted") %>%
+  group_by(conductorName) %>%
+  mutate(seasons = n_distinct(seasonYear)) %>%
+  filter(seasons > 5) %>%
+  group_by(conductorName, seasonYear) %>%
+  mutate(composers = n_distinct(composerName)) %>%
+  distinct(seasonYear,conductorName,composers) %>%
+  mutate(seasonYear_2 = seasonYear**2)
+
+composerNumber %>%
+  group_by(conductorName) %>%
+  nest() %>%
+  mutate(model = map(data, composersf)) %>%
+  mutate(tidied = map(model, tidy)) %>%
+  mutate(glance = map(model, glance))
+
+crescenti <- regs %>%
+  unnest(tidied) %>%
+  filter(term == "seasonYear") %>%
+  filter(estimate > 0) %>%
+  arrange(-estimate)
+  
+decrescenti <- regs %>%
+  unnest(tidied) %>%
+  filter(term == "seasonYear") %>%
+  filter(estimate < 0) %>%
+  arrange(estimate)
+  
+composerNumber %>%
+  inner_join(badfit) %>%
+  ggplot(aes(seasonYear,composers, color = conductorName)) +
+  geom_line(show.legend = FALSE)  
+  
+badfit <- regs %>%
+  unnest(glance) %>%
+  filter(r.squared < 0.5)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+tolto sta roba
+
+
+# mesi
+perf_data <- performances %>%
+  mutate(month = month(Date, label = TRUE)) %>%
+  group_by(composerName,year,month) %>%
+  mutate(monthP_Y = n()) %>%
+  group_by(composerName,year) %>%
+  mutate(yearP = n()) %>%
+  group_by(composerName) %>%
+  mutate(months = n_distinct(month)) %>%
+  filter(months == 12) %>%
+  select(eventType,composerName,Date,conductorName,year,month,monthP_Y,yearP) %>%
+  group_by(composerName)
+
+regs <- perf_data %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~ lm(monthP_Y ~ conductorName + eventType, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance),
+    augmented = map(fit, augment)
+  )
+```
+
+
+
+
+
+
+
+
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
