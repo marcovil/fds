@@ -393,7 +393,7 @@ Costruisco un tibble ridotto per le analisi successive.
 ```{r}
 performances <- programsT %>%
   filter(is.na(interval)) %>%
-  distinct(orchestra,eventType,season,concertID, Date, composerName, workTitle, conductorName, co_conductor) %>%
+  distinct(concertID, Date, composerName, workTitle, conductorName, co_conductor, orchestra, eventType, season) %>%
   mutate(year = year(Date)) %>%
   mutate(seasonN = dense_rank(season)) %>%
   group_by(seasonN) %>%
@@ -929,7 +929,7 @@ select(conductorName, composerName)
 
 very_bad <- regs %>%
   unnest(glanced) %>%
-  filter(r.squared <= 0.1) %>%
+  filter(r.squared <= 0.2) %>%
 select(conductorName, composerName)
 ```
 
@@ -961,11 +961,12 @@ Direttori-compositori con fit molto buono per coppie che compaiono almeno per 3 
 ccn2 %>%
   group_by(conductorName,composerName) %>%
   mutate(seasons = n_distinct(seasonYear)) %>%
-  filter(seasons > 3) %>%
-  inner_join(very_good) %>%
+  filter(seasons > 5) %>%
+  inner_join(good) %>%
   ggplot() +
-  geom_line(aes(seasonYear,perc,color=conductorName), show.legend = TRUE) +
-  geom_point(aes(seasonYear,perc,color=conductorName), show.legend = FALSE)
+  geom_line(aes(seasonYear,perc,color=conductorName), show.legend = FALSE) +
+  geom_point(aes(seasonYear,perc,color=conductorName), show.legend = FALSE) +
+  facet_wrap(~conductorName)
 ```
 
 Conduttori con modelli molto buoni.
@@ -995,9 +996,9 @@ Bernstein, fit molto buono.
 ccn2 %>%
   group_by(conductorName,composerName) %>%
   mutate(seasons = n_distinct(seasonYear)) %>%
-  filter(seasons > 2) %>%
+  filter(seasons > 3) %>%
   filter(conductorName == "Bernstein, Leonard") %>%
-  inner_join(very_good) %>%
+  inner_join(good) %>%
   ggplot() +
   geom_line(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
   geom_point(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
@@ -1008,9 +1009,9 @@ ccn2 %>%
 ccn2 %>%
   group_by(conductorName,composerName) %>%
   mutate(seasons = n_distinct(seasonYear)) %>%
-  filter(seasons > 2) %>%
+  filter(seasons > 3) %>%
   filter(conductorName == "Bernstein, Leonard") %>%
-  inner_join(very_bad) %>%
+  anti_join(good) %>%
   ggplot() +
   geom_line(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
   geom_point(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
@@ -1057,33 +1058,41 @@ ccn2 %>%
   mutate(seasons = n_distinct(seasonYear)) %>%
   filter(seasons > 1) %>%
   filter(conductorName == "Masur, Kurt") %>%
-  inner_join(very_good_lin) %>%
+  inner_join(good) %>%
   ggplot() +
   geom_line(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
   geom_point(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
   facet_wrap(~composerName)
 ```
 
+Boulez, fit buono.
 
 ```{r}
-regs %>%
-  unnest(tidied) %>%
-  filter(term == "seasonYear") %>%
-  filter(estimate < 0.5 & estimate > -0.5)
-
-regs %>%
-  unnest(tidied) %>%
-  filter(term == "seasonYear") %>%
+ccn2 %>%
+  group_by(conductorName,composerName) %>%
+  mutate(seasons = n_distinct(seasonYear)) %>%
+  filter(seasons > 1) %>%
+  filter(conductorName == "Boulez, Pierre") %>%
+  inner_join(good) %>%
   ggplot() +
-  geom_histogram(aes(estimate, binwidth = 1)) +
-  coord_cartesian(xlim =c(-100, 100))
+  geom_line(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
+  geom_point(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
+  facet_wrap(~composerName)
+```
 
-regs %>%
-  unnest(tidied) %>%
-  filter(term == "seasonYear") %>%
-  filter(estimate > 40)
+Boulez, anti fit buono.
 
-
+```{r}
+ccn2 %>%
+  group_by(conductorName,composerName) %>%
+  mutate(seasons = n_distinct(seasonYear)) %>%
+  filter(seasons > 1) %>%
+  filter(conductorName == "Boulez, Pierre") %>%
+  anti_join(good) %>%
+  ggplot() +
+  geom_line(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
+  geom_point(aes(seasonYear,perc,color=composerName), show.legend = FALSE) +
+  facet_wrap(~composerName)
 ```
 
 
